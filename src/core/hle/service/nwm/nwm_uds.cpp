@@ -56,9 +56,6 @@ constexpr std::size_t MaxBeaconFrames = 15;
 // Network node id used when a SecureData packet is addressed to every connected node.
 constexpr u16 BroadcastNetworkNodeId = 0xFFFF;
 
-// The Host has always dest_node_id 1
-constexpr u16 HostDestNodeId = 1;
-
 std::list<Network::WifiPacket> NWM_UDS::GetReceivedBeacons(const MacAddress& sender) {
     std::scoped_lock lock(beacon_mutex);
     if (sender != Network::BroadcastMac) {
@@ -501,7 +498,12 @@ void NWM_UDS::HandleDeauthenticationFrame(const Network::WifiPacket& packet) {
     std::scoped_lock lock{connection_status_mutex, system.Kernel().GetHLELock()};
 
     if (connection_status.status != NetworkStatus::ConnectedAsHost) {
-        LOG_ERROR(Service_NWM, "Got deauthentication frame but we are not the host");
+        LOG_DEBUG(Service_NWM, "Got deauthentication frame but we are not the host");
+        
+        if (net_frame_sync_impl->IsEnabled()) {
+            net_frame_sync_impl->NotifyDisabled();
+        }
+        connection_status.status = NetworkStatus::NotConnected;
         return;
     }
     if (node_map.find(packet.transmitter_address) == node_map.end()) {
@@ -533,6 +535,10 @@ void NWM_UDS::HandleDeauthenticationFrame(const Network::WifiPacket& packet) {
 
         network_info.total_nodes--;
         // TODO(B3N30): broadcast new connection_status to clients
+        
+        if (net_frame_sync_impl->IsEnabled()) {
+            net_frame_sync_impl->CheckAdvanceNextFrame();
+        }
     }
     node_it->Reset();
     connection_status_event->Signal();
@@ -572,6 +578,9 @@ void NWM_UDS::OnWifiPacketReceived(const Network::WifiPacket& packet) {
         break;
     case Network::WifiPacket::PacketType::NodeMap:
         HandleNodeMapPacket(packet);
+        break;
+    case Network::WifiPacket::PacketType::FrameSync:
+        net_frame_sync_impl->HandleNetFrameSyncPacket(packet);
         break;
     }
 }
@@ -767,15 +776,17 @@ void NWM_UDS::InitializeDeprecated(Kernel::HLERequestContext& ctx) {
     LOG_DEBUG(Service_NWM, "called sharedmem_size=0x{:08X}", sharedmem_size);
 }
 
-ConnectionStatus NWM_UDS::GetConnectionStatusHLE() {
+ConnectionStatus NWM_UDS::GetConnectionStatusHLE(bool reset) {
     std::scoped_lock lock(connection_status_mutex);
     ConnectionStatus cs_out = connection_status;
 
-    // Reset the bitmask of changed nodes after each call to this
-    // function to prevent falsely informing games of outstanding
-    // changes in subsequent calls.
-    // TODO(Subv): Find exactly where the NWM module resets this value.
-    connection_status.changed_nodes = 0;
+    if (reset) {
+        // Reset the bitmask of changed nodes after each call to this
+        // function to prevent falsely informing games of outstanding
+        // changes in subsequent calls.
+        // TODO(Subv): Find exactly where the NWM module resets this value.
+        connection_status.changed_nodes = 0;
+    }
 
     return cs_out;
 }
@@ -1122,6 +1133,9 @@ Result NWM_UDS::DestroyNetworkHLE() {
     }
 
     // TODO(B3N30): Send 3 Deauth packets
+    
+    // workaround to let clients know they're being kicked
+    EjectClientHLE(BroadcastNetworkNodeId);
 
     u16_le tmp_node_id = connection_status.network_node_id;
     connection_status = {};
@@ -1134,6 +1148,10 @@ Result NWM_UDS::DestroyNetworkHLE() {
         bind_node.second.event->Signal();
     }
     channel_data.clear();
+    
+    if (net_frame_sync_impl->IsEnabled()) {
+        net_frame_sync_impl->NotifyDisabled();
+    }
 
     return ResultSuccess;
 }
@@ -1448,6 +1466,11 @@ void NWM_UDS::ConnectToNetworkDeprecated(Kernel::HLERequestContext& ctx) {
 ResultStatus NWM_UDS::DisconnectNetworkHLE() {
     using Network::WifiPacket;
     WifiPacket deauth;
+    
+    if (net_frame_sync_impl->IsEnabled()) {
+        net_frame_sync_impl->NotifyDisabled();
+    }
+    
     {
         std::scoped_lock lock(connection_status_mutex);
         if (connection_status.status == NetworkStatus::ConnectedAsHost) {
@@ -1712,6 +1735,8 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
     } else {
         LOG_ERROR(Service_NWM, "Network isn't initalized");
     }
+    
+    net_frame_sync_impl = std::make_unique<UDSNetFrameSyncImpl>(*this);
 }
 
 NWM_UDS::~NWM_UDS() {

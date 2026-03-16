@@ -20,6 +20,7 @@
 #include "video_core/renderer_software/sw_blitter.h"
 #include "video_core/right_eye_disabler.h"
 #include "video_core/video_core.h"
+#include "network/frame_sync.h"
 
 namespace VideoCore {
 
@@ -32,6 +33,7 @@ MICROPROFILE_DEFINE(GPU_CmdlistProcessing, "GPU", "Cmdlist Processing", MP_RGB(1
 GPU::GPU(Core::System& system, Frontend::EmuWindow& emu_window,
          Frontend::EmuWindow* secondary_window)
     : right_eye_disabler{std::make_unique<RightEyeDisabler>(*this)},
+      net_frame_synchronizer{std::make_unique<Network::NetFrameSynchronizer>()},
       impl{std::make_unique<Impl>(system, emu_window, secondary_window)} {
     impl->vblank_event = impl->timing.RegisterEvent(
         "GPU::VBlankCallback",
@@ -216,6 +218,9 @@ void GPU::SetBufferSwap(u32 screen_id, const Service::GSP::FrameBufferInfo& info
         MicroProfileFlip();
         impl->system.perf_stats->EndGameFrame();
         right_eye_disabler->ReportEndFrame();
+        if (net_frame_synchronizer->IsEnabled()) {
+            net_frame_synchronizer->WaitSyncNextFrame();
+        }
     }
 }
 

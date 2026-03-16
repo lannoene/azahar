@@ -19,6 +19,7 @@
 #include "common/common_types.h"
 #include "common/swap.h"
 #include "core/hle/service/nwm/uds_common.h"
+#include "core/hle/service/nwm/uds_frame_sync.h"
 #include "core/hle/service/service.h"
 #include "network/network.h"
 
@@ -36,6 +37,10 @@ class DLP_Base;
 class DLP_Clt_Base;
 class DLP_SRVR;
 } // namespace Service::DLP
+
+namespace Network {
+class NetFrameSynchronizer;
+} // namespace Network
 
 // Local-WLAN service
 
@@ -70,6 +75,9 @@ const u16 DefaultBeaconInterval = 100;
 constexpr u32 UDSMaxNodes = 16;
 
 constexpr u16 NodeIDSpec = 0;
+
+// The Host has always dest_node_id 1
+constexpr u16 HostDestNodeId = 1;
 
 struct NodeInfo {
     u64_le friend_code_seed;
@@ -152,6 +160,8 @@ enum class TagId : u8 {
     ERPInformation = 42,
     VendorSpecific = 221
 };
+
+void SendPacket(Network::WifiPacket& packet);
 
 class NWM_UDS final : public ServiceFramework<NWM_UDS> {
 public:
@@ -490,7 +500,7 @@ private:
                                                       u32 max_out_buff_size_aligned,
                                                       std::vector<u8>& output_buffer,
                                                       void* secure_data_out);
-    ConnectionStatus GetConnectionStatusHLE();
+    ConnectionStatus GetConnectionStatusHLE(bool reset = true);
     ResultStatus DisconnectNetworkHLE();
     std::pair<ResultStatus, std::shared_ptr<Kernel::Event>> BindHLE(u32 bind_node_id,
                                                                     u32 recv_buffer_size,
@@ -642,6 +652,8 @@ private:
 
     // List of the last <MaxBeaconFrames> beacons received from the network.
     std::list<Network::WifiPacket> received_beacons;
+    
+    std::unique_ptr<UDSNetFrameSyncImpl> net_frame_sync_impl;
 
     template <class Archive>
     void serialize(Archive& ar, const unsigned int);
@@ -649,6 +661,8 @@ private:
     friend class Service::DLP::DLP_Base;
     friend class Service::DLP::DLP_Clt_Base;
     friend class Service::DLP::DLP_SRVR;
+    friend class Network::NetFrameSynchronizer;
+    friend class UDSNetFrameSyncImpl;
 };
 
 } // namespace Service::NWM

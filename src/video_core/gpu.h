@@ -30,6 +30,10 @@ namespace Frontend {
 class EmuWindow;
 }
 
+namespace Network {
+class NetFrameSynchronizer;
+}
+
 namespace VideoCore {
 
 /// Measured on hardware to be 2240568 timer cycles or 4481136 ARM11 cycles
@@ -101,6 +105,10 @@ public:
 
     /// Releases the renderer (for GL context destroy in libretro)
     void ReleaseRenderer();
+    
+    Network::NetFrameSynchronizer& GetNetFrameSynchronizer() {
+        return *net_frame_synchronizer;
+    }
 
 private:
     void SubmitCmdList(u32 index);
@@ -117,6 +125,7 @@ private:
     void serialize(Archive& ar, const u32 file_version);
 
     std::unique_ptr<RightEyeDisabler> right_eye_disabler;
+    std::unique_ptr<Network::NetFrameSynchronizer> net_frame_synchronizer;
 
 private:
     friend class RightEyeDisabler;

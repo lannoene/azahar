@@ -406,6 +406,8 @@ add_library(citra_core STATIC
     hle/service/nwm/uds_connection.h
     hle/service/nwm/uds_data.cpp
     hle/service/nwm/uds_data.h
+    hle/service/nwm/uds_frame_sync.cpp
+    hle/service/nwm/uds_frame_sync.h
     hle/service/plgldr/plgldr.cpp
     hle/service/plgldr/plgldr.h
     hle/service/pm/pm.cpp
