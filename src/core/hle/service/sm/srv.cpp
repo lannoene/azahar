@@ -165,9 +165,10 @@ void SRV::GetServiceHandle(Kernel::HLERequestContext& ctx) {
     if (result.IsError()) {
         if (wait_until_available && result == ResultServiceNotRegistered) {
             LOG_INFO(Service_SRV, "called service={} delayed", name);
+            static int n = 0;
             std::shared_ptr<Kernel::Event> get_service_handle_event =
-                ctx.SleepClientThread("GetServiceHandle", std::chrono::nanoseconds(-1), get_handle);
-            get_service_handle_delayed_map[name] = std::move(get_service_handle_event);
+                ctx.SleepClientThread("GetServiceHandle" + std::to_string(n++), std::chrono::nanoseconds(-1), get_handle);
+            get_service_handle_delayed_map[name].emplace_back(std::move(get_service_handle_event));
             return;
         } else {
             IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -278,10 +279,14 @@ void SRV::RegisterService(Kernel::HLERequestContext& ctx) {
         LOG_ERROR(Service_SRV, "called service={} -> error 0x{:08X}", name, result.raw);
         return;
     }
+    
+    LOG_DEBUG(Service_SRV, "Registering service: {}", name);
 
     auto it = get_service_handle_delayed_map.find(name);
     if (it != get_service_handle_delayed_map.end()) {
-        it->second->Signal();
+        for (auto ev : it->second) {
+            ev->Signal();
+        }
         get_service_handle_delayed_map.erase(it);
     }
 

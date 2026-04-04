@@ -14,6 +14,10 @@ public:
 
 private:
     SERVICE_SERIALIZATION_SIMPLE
+    
+    void Initialize(Kernel::HLERequestContext& ctx);
+    void Shutdown(Kernel::HLERequestContext& ctx);
+    void ReadData(Kernel::HLERequestContext& ctx);
 };
 
 } // namespace Service::CFG

@@ -61,6 +61,7 @@ constexpr u32_le DEFAULT_CLOCK_SEQUENCE = 0;
 constexpr const char DEFAULT_SERVER_TYPE[4] = {'L', '1', '\0', '\0'};
 constexpr u32_le DEFAULT_0x00160000_DATA = 0;
 constexpr u32_le DEFAULT_MIIVERSE_ACCESS_KEY = 0;
+constexpr std::array<u8, 3072> DEFAULT_WIFI_CONFIGURATION = {};
 
 static const std::unordered_map<ConfigBlockID, ConfigBlockDefaults> DEFAULT_CONFIG_BLOCKS = {
     {UserTimeOffsetBlockID,
@@ -117,6 +118,12 @@ static const std::unordered_map<ConfigBlockID, ConfigBlockDefaults> DEFAULT_CONF
      {AccessFlag::Global, &DEFAULT_0x00160000_DATA, sizeof(DEFAULT_0x00160000_DATA)}},
     {MiiverseAccessKeyBlockID,
      {AccessFlag::Global, &DEFAULT_MIIVERSE_ACCESS_KEY, sizeof(DEFAULT_MIIVERSE_ACCESS_KEY)}},
+    {WifiConfigurationSlot0BlockID,
+     {AccessFlag::System, &DEFAULT_WIFI_CONFIGURATION, sizeof(DEFAULT_WIFI_CONFIGURATION)}},
+    {WifiConfigurationSlot1BlockID,
+     {AccessFlag::System, &DEFAULT_WIFI_CONFIGURATION, sizeof(DEFAULT_WIFI_CONFIGURATION)}},
+    {WifiConfigurationSlot2BlockID,
+     {AccessFlag::System, &DEFAULT_WIFI_CONFIGURATION, sizeof(DEFAULT_WIFI_CONFIGURATION)}}
 };
 
 const EULAVersion& GetDefaultEULAVersion() {

@@ -24,6 +24,8 @@ private:
     std::shared_ptr<Kernel::Event> daemon_event;
     
     void GetDaemonEventHandle(Kernel::HLERequestContext& ctx);
+    void SetDaemonToWorkingState(Kernel::HLERequestContext& ctx);
+    void GetDaemonState(Kernel::HLERequestContext& ctx);
 };
 
 } // namespace Service::NIM

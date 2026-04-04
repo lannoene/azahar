@@ -23,6 +23,14 @@ void NIM_NDM::GetDaemonEventHandle(Kernel::HLERequestContext& ctx) {
     LOG_WARNING(Service_NIM, "(STUBBED) called");
 }
 
+void SetDaemonToWorkingState(Kernel::HLERequestContext& ctx) {
+    
+}
+
+void GetDaemonState(Kernel::HLERequestContext& ctx) {
+
+}
+
 NIM_NDM::NIM_NDM(Core::System& system) : ServiceFramework("nim:ndm", 2) {
     const FunctionInfo functions[] = {
         // clang-format off
