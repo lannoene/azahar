@@ -1178,13 +1178,6 @@ static void Init(u16 port) {
         LOG_ERROR(Debug_GDBStub, "Failed to create gdb socket");
     }
 
-    // Set socket to SO_REUSEADDR so it can always bind on the same port
-    int reuse_enabled = 1;
-    if (setsockopt(tmpsock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse_enabled,
-                   sizeof(reuse_enabled)) < 0) {
-        LOG_ERROR(Debug_GDBStub, "Failed to set gdb socket option");
-    }
-
     const sockaddr* server_addr = reinterpret_cast<const sockaddr*>(&saddr_server);
     socklen_t server_addrlen = sizeof(saddr_server);
     if (bind(tmpsock, server_addr, server_addrlen) < 0) {
@@ -1215,7 +1208,11 @@ static void Init(u16 port) {
 
     // Clean up temporary socket if it's still alive at this point.
     if (tmpsock != -1) {
-        shutdown(tmpsock, SHUT_RDWR);
+#ifdef _WIN32
+        closesocket(tmpsock);
+#else
+        close(tmpsock);
+#endif
     }
 }
 
@@ -1231,7 +1228,11 @@ void Shutdown() {
 
     LOG_INFO(Debug_GDBStub, "Stopping GDB ...");
     if (gdbserver_socket != -1) {
-        shutdown(gdbserver_socket, SHUT_RDWR);
+#ifdef _WIN32
+        closesocket(gdbserver_socket);
+#else
+        close(gdbserver_socket);
+#endif
         gdbserver_socket = -1;
     }
 
