@@ -382,6 +382,8 @@ add_library(citra_core STATIC
     hle/service/nim/nim.h
     hle/service/nim/nim_aoc.cpp
     hle/service/nim/nim_aoc.h
+    hle/service/nim/nim_ndm.cpp
+    hle/service/nim/nim_ndm.h
     hle/service/nim/nim_s.cpp
     hle/service/nim/nim_s.h
     hle/service/nim/nim_u.cpp
@@ -452,6 +454,8 @@ add_library(citra_core STATIC
     hle/service/sm/srv.h
     hle/service/soc/soc_u.cpp
     hle/service/soc/soc_u.h
+    hle/service/soc/soc_p.cpp
+    hle/service/soc/soc_p.h
     hle/service/ssl/ssl_c.cpp
     hle/service/ssl/ssl_c.h
     hw/aes/arithmetic128.cpp

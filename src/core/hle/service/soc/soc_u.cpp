@@ -19,6 +19,7 @@
 #include "core/hle/kernel/shared_memory.h"
 #include "core/hle/result.h"
 #include "core/hle/service/soc/soc_u.h"
+#include "core/hle/service/soc/soc_p.h"
 #include "network/socket_manager.h"
 
 #ifdef _WIN32
@@ -2360,6 +2361,7 @@ std::shared_ptr<SOC_U> GetService(Core::System& system) {
 void InstallInterfaces(Core::System& system) {
     auto& service_manager = system.ServiceManager();
     std::make_shared<SOC_U>()->InstallAsService(service_manager);
+    std::make_shared<SOC_P>(system)->InstallAsService(service_manager);
 }
 
 } // namespace Service::SOC

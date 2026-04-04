@@ -5,6 +5,7 @@
 #include "core/core.h"
 #include "core/hle/service/nim/nim.h"
 #include "core/hle/service/nim/nim_aoc.h"
+#include "core/hle/service/nim/nim_ndm.h"
 #include "core/hle/service/nim/nim_s.h"
 #include "core/hle/service/nim/nim_u.h"
 
@@ -17,6 +18,7 @@ void InstallInterfaces(Core::System& system) {
     }
     auto& service_manager = system.ServiceManager();
     std::make_shared<NIM_AOC>()->InstallAsService(service_manager);
+    std::make_shared<NIM_NDM>(system)->InstallAsService(service_manager);
     std::make_shared<NIM_S>()->InstallAsService(service_manager);
     std::make_shared<NIM_U>(system)->InstallAsService(service_manager);
 }
