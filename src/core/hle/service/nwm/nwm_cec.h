@@ -14,6 +14,8 @@ public:
 
 private:
     SERVICE_SERIALIZATION_SIMPLE
+    
+    void UnkStart(Kernel::HLERequestContext& ctx);
 };
 
 } // namespace Service::NWM

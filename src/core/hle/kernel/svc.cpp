@@ -844,16 +844,17 @@ Result SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle_cou
     using ObjectPtr = std::shared_ptr<WaitObject>;
     std::vector<ObjectPtr> objects(handle_count);
 
-    LOG_INFO(Kernel_SVC, "Handle count={} handles address=0x{:x}", handle_count, handles_address);
+    //LOG_INFO(Kernel_SVC, "Handle count={} handles address=0x{:x}", handle_count, handles_address);
 
     for (int i = 0; i < handle_count; ++i) {
         Handle handle = memory.Read32(handles_address + i * sizeof(Handle));
         auto object = kernel.GetCurrentProcess()->handle_table.Get<WaitObject>(handle);
         //R_UNLESS(object, ResultInvalidHandle);
-        if (object)
-            LOG_INFO(Kernel_SVC, "got handle {}", i + 1);
-        else
+        if (object) {
+            //LOG_INFO(Kernel_SVC, "got handle {}", i + 1);
+        } else {
             LOG_ERROR(Kernel_SVC, "no handle {}", i + 1);
+        }
         objects[i] = object;
     }
 

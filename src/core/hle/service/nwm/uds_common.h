@@ -13,4 +13,6 @@ enum class ConnectionType : u8 {
     Spectator = 0x2,
 };
 
+using MacAddress = std::array<u8, 6>;
+
 }; // namespace Service::NWM

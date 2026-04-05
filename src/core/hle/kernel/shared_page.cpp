@@ -91,8 +91,8 @@ Handler::Handler(Core::Timing& timing, u64 override_init_time) : timing(timing) 
     // TODO(PabloMK7)
     // Set wifi state to internet, to fake a connection from the NDM service.
     // Remove once it is figured out how NDM uses AC to connect at console boot.
-    SetWifiLinkLevel(WifiLinkLevel::Best);
-    SetWifiState(WifiState::Internet);
+    SetWifiLinkLevel(WifiLinkLevel::Off);
+    SetWifiState(WifiState::Enabled);
 }
 
 u64 Handler::GetSystemTimeSince2000() const {

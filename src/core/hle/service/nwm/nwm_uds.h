@@ -56,8 +56,6 @@ enum class ResultStatus {
     RecvError_PacketSizeTooLarge,
 };
 
-using MacAddress = std::array<u8, 6>;
-
 const std::size_t ApplicationDataSize = 0xC8;
 const u8 DefaultNetworkChannel = 11;
 

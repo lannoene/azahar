@@ -76,13 +76,17 @@ void SRV::RegisterClient(Kernel::HLERequestContext& ctx) {
  */
 void SRV::EnableNotification(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
+    
+    static int s = 0;
+    auto sm = system.Kernel().CreateSemaphore(0, MAX_PENDING_NOTIFICATIONS, "SRV:Notification" + std::to_string(s++)).Unwrap();
 
-    notification_semaphore =
-        system.Kernel().CreateSemaphore(0, MAX_PENDING_NOTIFICATIONS, "SRV:Notification").Unwrap();
+    auto& n = notification_semaphore_map[std::static_pointer_cast<Kernel::ClientSession>(ctx.Session()->parent->client->shared_from_this())];
+    n.sm_notify = sm;
+        
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
     rb.Push(ResultSuccess);
-    rb.PushCopyObjects(notification_semaphore);
+    rb.PushCopyObjects(sm);
     LOG_WARNING(Service_SRV, "(STUBBED) called");
 }
 
@@ -209,6 +213,8 @@ void SRV::Subscribe(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     u32 notification_id = rp.Pop<u32>();
 
+    notification_subscribers_map[notification_id].push_back(std::static_pointer_cast<Kernel::ClientSession>(ctx.Session()->parent->client->shared_from_this()));
+
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
     LOG_WARNING(Service_SRV, "(STUBBED) called, notification_id=0x{:X}", notification_id);
@@ -226,6 +232,11 @@ void SRV::Subscribe(Kernel::HLERequestContext& ctx) {
 void SRV::Unsubscribe(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     u32 notification_id = rp.Pop<u32>();
+    
+    auto it = notification_subscribers_map.find(notification_id);
+    if (it != notification_subscribers_map.end()) {
+        //it->erase(it);
+    }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
@@ -256,7 +267,9 @@ void SRV::PublishToSubscriber(Kernel::HLERequestContext& ctx) {
         LOG_WARNING(Service_SRV, "(STUBBED) called, notification_id=0x{:X}, flags={}",
                     notification_id, flags);
     }
-
+    
+    PublishToSubscribers(notification_id);
+    
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
 }
@@ -295,6 +308,38 @@ void SRV::RegisterService(Kernel::HLERequestContext& ctx) {
     rb.PushMoveObjects(std::move(port));
 }
 
+void SRV::ReceiveNotification(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    
+    LOG_DEBUG(Service_SRV, "called");
+    
+    auto& n = notification_semaphore_map[std::static_pointer_cast<Kernel::ClientSession>(ctx.Session()->parent->client->shared_from_this())];
+    if (!n.notifications.size()) {
+        LOG_ERROR(Service_SRV, "There are no pending notifications!");
+        return;
+    }
+    
+    u16 notif = n.notifications.front();
+    n.notifications.pop();
+    
+    IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
+    rb.Push(ResultSuccess);
+    rb.Push(notif);
+}
+
+void SRV::PublishToSubscribers(u16 notif) {
+    auto it = notification_subscribers_map.find(notif);
+    if (it != notification_subscribers_map.end()) {
+        LOG_DEBUG(Service_SRV, "called notif=0x{:x}, num subscribers={}", notif, it->second.size());
+        for (auto ev : it->second) {
+            auto& n = notification_semaphore_map[ev];
+            n.notifications.push(notif);
+            int rc = 0;
+            n.sm_notify->Release(&rc, 1);
+        }
+    }
+}
+
 SRV::SRV(Core::System& system) : ServiceFramework("srv:", 64), system(system) {
     static const FunctionInfo functions[] = {
         // clang-format off
@@ -308,7 +353,7 @@ SRV::SRV(Core::System& system) : ServiceFramework("srv:", 64), system(system) {
         {0x0008, nullptr, "GetPort"},
         {0x0009, &SRV::Subscribe, "Subscribe"},
         {0x000A, &SRV::Unsubscribe, "Unsubscribe"},
-        {0x000B, nullptr, "ReceiveNotification"},
+        {0x000B, &SRV::ReceiveNotification, "ReceiveNotification"},
         {0x000C, &SRV::PublishToSubscriber, "PublishToSubscriber"},
         {0x000D, nullptr, "PublishAndGetSubscriber"},
         {0x000E, nullptr, "IsServiceRegistered"},

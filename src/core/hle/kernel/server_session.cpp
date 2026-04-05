@@ -83,7 +83,7 @@ Result ServerSession::HandleSyncRequest(std::shared_ptr<Thread> thread) {
     // similar.
 
     // If this ServerSession has an associated HLE handler, forward the request to it.
-    if (hle_handler != nullptr) {
+    if (hle_handler) {
         std::array<u32_le, IPC::COMMAND_BUFFER_LENGTH + 2 * IPC::MAX_STATIC_BUFFERS> cmd_buf;
         auto current_process = thread->owner_process.lock();
         ASSERT(current_process);
@@ -113,7 +113,7 @@ Result ServerSession::HandleSyncRequest(std::shared_ptr<Thread> thread) {
         // svcReplyAndReceive for LLE servers.
         thread->status = ThreadStatus::WaitIPC;
 
-        if (hle_handler != nullptr) {
+        if (hle_handler) {
             // For HLE services, we put the request threads to sleep for a short duration to
             // simulate IPC overhead, but only if the HLE handler didn't put the thread to sleep for
             // other reasons like an async callback. The IPC overhead is needed to prevent

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/hle/service/service.h"
+#include "network/network.h"
 
 namespace Service::NWM {
 
@@ -14,6 +15,16 @@ public:
 
 private:
     SERVICE_SERIALIZATION_SIMPLE
+    
+    std::list<Network::WifiPacket> GetReceivedBeacons(const Network::MacAddress& sender);
+    
+    void Initialize(Kernel::HLERequestContext& ctx);
+    void Finalize(Kernel::HLERequestContext& ctx);
+    void UnkScanForBeacons(Kernel::HLERequestContext& ctx);
+    void RecvBeaconBroadcastData(Kernel::HLERequestContext& ctx);
+    void Unk1(Kernel::HLERequestContext& ctx);
+    
+    std::list<Network::WifiPacket> received_beacons;
 };
 
 } // namespace Service::NWM

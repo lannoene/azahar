@@ -15,6 +15,9 @@ namespace Service::NWM {
 
 using MacAddress = std::array<u8, 6>;
 constexpr std::array<u8, 3> NintendoOUI = {0x00, 0x1F, 0x32};
+class NetworkInfo;
+class NodeInfo;
+using NodeList = std::vector<NodeInfo>;
 
 /**
  * Internal vendor-specific tag ids as stored inside

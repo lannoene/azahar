@@ -64,6 +64,11 @@ public:
     std::shared_ptr<T> GetService(const std::string& service_name) const {
         static_assert(std::is_base_of_v<Kernel::SessionRequestHandler, T>,
                       "Not a base of ServiceFrameworkBase");
+        if constexpr(std::is_same_v<Service::SM::SRV, T>) {
+            if (service_name == "srv:") {
+                return srv_interface.lock();
+            }
+        }
         auto service = registered_services.find(service_name);
         if (service == registered_services.end()) {
             LOG_DEBUG(Service, "Can't find service: {}", service_name);
@@ -71,6 +76,7 @@ public:
         }
         auto port = service->second->GetServerPort();
         if (port == nullptr) {
+            LOG_ERROR(Service, "Can't find port from service: {}", service_name);
             return nullptr;
         }
         return std::static_pointer_cast<T>(port->hle_handler);

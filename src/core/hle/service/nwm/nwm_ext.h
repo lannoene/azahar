@@ -14,6 +14,9 @@ public:
 
 private:
     SERVICE_SERIALIZATION_SIMPLE
+    
+    void Unk1(Kernel::HLERequestContext& ctx);
+    void ControlWifiEnabled(Kernel::HLERequestContext& ctx);
 };
 
 } // namespace Service::NWM
