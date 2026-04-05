@@ -14,8 +14,11 @@ public:
 
 private:
     void GetMACAddress(Kernel::HLERequestContext& ctx);
+    void Initialize(Kernel::HLERequestContext& ctx);
 
     Core::System& system;
+    std::shared_ptr<Kernel::Event> event;
+    std::shared_ptr<Kernel::SharedMemory> shared_mem;
 
     SERVICE_SERIALIZATION_SIMPLE
 };

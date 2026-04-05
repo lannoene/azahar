@@ -21,7 +21,7 @@ void NWM_EXT::ControlWifiEnabled(Kernel::HLERequestContext& ctx) {
     LOG_DEBUG(Service_NWM, "called disable={}", disable);
     
     Core::System::GetInstance().Kernel().GetSharedPageHandler().SetWifiState(!disable ? SharedPage::WifiState::Enabled : SharedPage::WifiState::Disabled);
-    Core::System::GetInstance().Kernel().GetSharedPageHandler().SetWifiLinkLevel(!disable ? SharedPage::WifiLinkLevel::Best : SharedPage::WifiLinkLevel::Off);
+    Core::System::GetInstance().Kernel().GetSharedPageHandler().SetWifiLinkLevel(SharedPage::WifiLinkLevel::Off);
     
     Core::System::GetInstance().ServiceManager().GetService<SM::SRV>("srv:")->PublishToSubscribers(0x302);
     if (disable)

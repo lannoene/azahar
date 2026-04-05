@@ -58,6 +58,9 @@ void SRV::RegisterClient(Kernel::HLERequestContext& ctx) {
         return;
     }
     const auto caller_pid = rp.Pop<u32>();
+    
+    SRVSessionSlot *s = GetSessionData(ctx.Session());
+    s->pid = caller_pid;
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
@@ -77,10 +80,11 @@ void SRV::RegisterClient(Kernel::HLERequestContext& ctx) {
 void SRV::EnableNotification(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     
-    static int s = 0;
-    auto sm = system.Kernel().CreateSemaphore(0, MAX_PENDING_NOTIFICATIONS, "SRV:Notification" + std::to_string(s++)).Unwrap();
+    SRVSessionSlot *s = GetSessionData(ctx.Session());
+    ASSERT(s->pid);
+    auto sm = system.Kernel().CreateSemaphore(0, MAX_PENDING_NOTIFICATIONS, "SRV:Notification" + std::to_string(s->pid)).Unwrap();
 
-    auto& n = notification_semaphore_map[std::static_pointer_cast<Kernel::ClientSession>(ctx.Session()->parent->client->shared_from_this())];
+    auto& n = notification_semaphore_map[s->pid];
     n.sm_notify = sm;
         
 
@@ -213,7 +217,9 @@ void SRV::Subscribe(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     u32 notification_id = rp.Pop<u32>();
 
-    notification_subscribers_map[notification_id].push_back(std::static_pointer_cast<Kernel::ClientSession>(ctx.Session()->parent->client->shared_from_this()));
+    SRVSessionSlot *s = GetSessionData(ctx.Session());
+    ASSERT(s->pid);
+    notification_subscribers_map[notification_id].push_back(s->pid);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
@@ -313,9 +319,13 @@ void SRV::ReceiveNotification(Kernel::HLERequestContext& ctx) {
     
     LOG_DEBUG(Service_SRV, "called");
     
-    auto& n = notification_semaphore_map[std::static_pointer_cast<Kernel::ClientSession>(ctx.Session()->parent->client->shared_from_this())];
+    SRVSessionSlot *s = GetSessionData(ctx.Session());
+    ASSERT(s->pid);
+    auto& n = notification_semaphore_map[s->pid];
     if (!n.notifications.size()) {
         LOG_ERROR(Service_SRV, "There are no pending notifications!");
+        IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+        rb.Push(-1); // TODO: find real error
         return;
     }
     

@@ -21,8 +21,12 @@ class Semaphore;
 
 namespace Service::SM {
 
+struct SRVSessionSlot : public Kernel::SessionRequestHandler::SessionDataBase {
+    u32 pid{};
+};
+
 /// Interface to "srv:" service
-class SRV final : public ServiceFramework<SRV> {
+class SRV final : public ServiceFramework<SRV, SRVSessionSlot> {
 public:
     explicit SRV(Core::System& system);
     ~SRV();
@@ -49,8 +53,8 @@ private:
     Core::System& system;
     std::shared_ptr<Kernel::Semaphore> notification_semaphore;
     std::unordered_map<std::string, std::vector<std::shared_ptr<Kernel::Event>>> get_service_handle_delayed_map;
-    std::unordered_map<u16, std::vector<std::shared_ptr<Kernel::ClientSession>>> notification_subscribers_map;
-    std::unordered_map<std::shared_ptr<Kernel::ClientSession>, NotificationReceiver> notification_semaphore_map;
+    std::unordered_map<u16, std::vector<u32>> notification_subscribers_map;
+    std::unordered_map<u32, NotificationReceiver> notification_semaphore_map;
 
     template <class Archive>
     void serialize(Archive& ar, const unsigned int);

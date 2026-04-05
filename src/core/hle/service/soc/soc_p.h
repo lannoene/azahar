@@ -21,7 +21,9 @@ public:
 private:
     SERVICE_SERIALIZATION_SIMPLE
     
-    void GetDaemonEventHandle(Kernel::HLERequestContext& ctx);
+    std::shared_ptr<Kernel::Event> event;
+    
+    void GetSocEventHandle(Kernel::HLERequestContext& ctx);
 };
 
 } // namespace Service::SOC

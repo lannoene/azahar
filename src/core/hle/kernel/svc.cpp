@@ -844,30 +844,21 @@ Result SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle_cou
     using ObjectPtr = std::shared_ptr<WaitObject>;
     std::vector<ObjectPtr> objects(handle_count);
 
-    //LOG_INFO(Kernel_SVC, "Handle count={} handles address=0x{:x}", handle_count, handles_address);
-
     for (int i = 0; i < handle_count; ++i) {
         Handle handle = memory.Read32(handles_address + i * sizeof(Handle));
         auto object = kernel.GetCurrentProcess()->handle_table.Get<WaitObject>(handle);
-        //R_UNLESS(object, ResultInvalidHandle);
-        if (object) {
-            //LOG_INFO(Kernel_SVC, "got handle {}", i + 1);
-        } else {
-            LOG_ERROR(Kernel_SVC, "no handle {}", i + 1);
-        }
+        R_UNLESS(object, ResultInvalidHandle);
         objects[i] = object;
     }
 
     if (wait_all) {
         bool all_available =
             std::all_of(objects.begin(), objects.end(),
-                        [thread](const ObjectPtr& object) { return object ? !object->ShouldWait(thread) : true; });
+                        [thread](const ObjectPtr& object) { return !object->ShouldWait(thread); });
         if (all_available) {
             // We can acquire all objects right now, do so.
-            for (auto& object : objects) {
-                if (object)
-                    object->Acquire(thread);
-            }
+            for (auto& object : objects)
+                object->Acquire(thread);
             // Note: In this case, the `out` parameter is not set,
             // and retains whatever value it had before.
             return ResultSuccess;
@@ -884,8 +875,7 @@ Result SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle_cou
 
         // Add the thread to each of the objects' waiting threads.
         for (auto& object : objects) {
-            if (object)
-                object->AddWaitingThread(SharedFrom(thread));
+            object->AddWaitingThread(SharedFrom(thread));
         }
 
         thread->wait_objects = std::move(objects);
@@ -905,18 +895,14 @@ Result SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle_cou
     } else {
         // Find the first object that is acquirable in the provided list of objects
         auto itr = std::find_if(objects.begin(), objects.end(), [thread](const ObjectPtr& object) {
-            return object ? !object->ShouldWait(thread) : false;
+            return !object->ShouldWait(thread);
         });
 
         if (itr != objects.end()) {
             // We found a ready object, acquire it and set the result value
             WaitObject* object = itr->get();
-            if (object) {
-                object->Acquire(thread);
-                *out = static_cast<s32>(std::distance(objects.begin(), itr));
-            } else {
-                LOG_ERROR(Kernel_SVC, "badd");
-            }
+            object->Acquire(thread);
+            *out = static_cast<s32>(std::distance(objects.begin(), itr));
             return ResultSuccess;
         }
 
@@ -932,8 +918,7 @@ Result SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle_cou
         // Add the thread to each of the objects' waiting threads.
         for (std::size_t i = 0; i < objects.size(); ++i) {
             WaitObject* object = objects[i].get();
-            if (object)
-                object->AddWaitingThread(SharedFrom(thread));
+            object->AddWaitingThread(SharedFrom(thread));
         }
 
         thread->wait_objects = std::move(objects);
