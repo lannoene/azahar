@@ -61,7 +61,7 @@ public:
 
     /// Format the message using the players color
     QString GetPlayerChatMessage(u16 player) const {
-        auto color = player_color[player % 16];
+        auto color = player_color[player % player_color.size()];
         QString name;
         if (username.isEmpty() || username == nickname) {
             name = nickname;
@@ -122,14 +122,17 @@ public:
     static const int UsernameRole = Qt::UserRole + 2;
     static const int AvatarUrlRole = Qt::UserRole + 3;
     static const int GameNameRole = Qt::UserRole + 4;
+    static const int DeviceTypeRole = Qt::UserRole + 5;
 
     PlayerListItem() = default;
     explicit PlayerListItem(const std::string& nickname, const std::string& username,
-                            const std::string& avatar_url, const std::string& game_name) {
+                            const std::string& avatar_url, const std::string& game_name,
+                            Network::DeviceType device_type) {
         setEditable(false);
         setData(QString::fromStdString(nickname), NicknameRole);
         setData(QString::fromStdString(username), UsernameRole);
         setData(QString::fromStdString(avatar_url), AvatarUrlRole);
+        setData(QVariant(std::in_place_type<Network::DeviceType>, device_type), DeviceTypeRole);
         if (game_name.empty()) {
             setData(QObject::tr("Not running an application"), GameNameRole);
         } else {
@@ -149,7 +152,14 @@ public:
         } else {
             name = QStringLiteral("%1 (%2)").arg(nickname, username);
         }
-        return QStringLiteral("%1\n      %2").arg(name, data(GameNameRole).toString());
+        Network::DeviceType device_type = data(DeviceTypeRole).value<Network::DeviceType>();
+        QMap<Network::DeviceType, QString> device_type_map = {
+            {Network::DeviceType::Computer, QObject::tr("Desktop")},
+            {Network::DeviceType::Phone, QObject::tr("Mobile")},
+            {Network::DeviceType::Nintendo3DS, QObject::tr("Nintendo 3DS")}
+        };
+        QString device_type_str = device_type_map.value(device_type, QObject::tr("Unknown device"));
+        return QStringLiteral("%1\n      %2 - %3").arg(name, data(GameNameRole).toString(), device_type_str);
     }
 };
 
@@ -166,6 +176,8 @@ ChatRoom::ChatRoom(QWidget* parent) : QWidget(parent), ui(std::make_unique<Ui::C
     player_list->setHeaderData(0, Qt::Horizontal, tr("Members"));
 
     ui->chat_history->document()->setMaximumBlockCount(max_chat_lines);
+
+    ui->chat_message->setFocus();
 
     // register the network structs to use in slots and signals
     qRegisterMetaType<Network::ChatEntry>();
@@ -222,7 +234,7 @@ void ChatRoom::SendModerationRequest(Network::RoomMessageTypes type, const std::
     if (auto room = Network::GetRoomMember().lock()) {
         auto members = room->GetMemberInformation();
         auto it = std::find_if(members.begin(), members.end(),
-                               [&nickname](const Network::RoomMember::MemberInformation& member) {
+                               [&nickname](const Network::MemberInformation& member) {
                                    return member.nickname == nickname;
                                });
         if (it == members.end()) {
@@ -262,7 +274,7 @@ void ChatRoom::OnChatReceive(const Network::ChatEntry& chat) {
         // get the id of the player
         auto members = room->GetMemberInformation();
         auto it = std::find_if(members.begin(), members.end(),
-                               [&chat](const Network::RoomMember::MemberInformation& member) {
+                               [&chat](const Network::MemberInformation& member) {
                                    return member.nickname == chat.nickname &&
                                           member.username == chat.username;
                                });
@@ -331,7 +343,7 @@ void ChatRoom::OnSendChat() {
 
         auto members = room->GetMemberInformation();
         auto it = std::find_if(members.begin(), members.end(),
-                               [&chat](const Network::RoomMember::MemberInformation& member) {
+                               [&chat](const Network::MemberInformation& member) {
                                    return member.nickname == chat.nickname &&
                                           member.username == chat.username;
                                });
@@ -367,7 +379,8 @@ void ChatRoom::SetPlayerList(const Network::RoomMember::MemberList& member_list)
         if (member.nickname.empty())
             continue;
         QStandardItem* name_item = new PlayerListItem(member.nickname, member.username,
-                                                      member.avatar_url, member.game_info.name);
+                                                      member.avatar_url, member.game_info.name,
+                                                      member.device_type);
 
 #ifdef ENABLE_WEB_SERVICE
         if (!icon_cache.count(member.avatar_url) && !member.avatar_url.empty()) {

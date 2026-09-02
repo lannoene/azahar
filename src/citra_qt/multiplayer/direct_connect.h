@@ -5,9 +5,11 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <QDialog>
 #include <QFutureWatcher>
 #include "citra_qt/multiplayer/validation.h"
+#include "network/room_member.h"
 
 namespace Ui {
 class DirectConnect;
@@ -43,9 +45,14 @@ private:
     void Connect();
     void BeginConnecting();
     void EndConnecting();
+    void OnStateChange(const Network::RoomMember::State& state);
+    void OnConnectionError(const Network::RoomMember::Error& error);
 
     QFutureWatcher<void>* watcher;
     std::unique_ptr<Ui::DirectConnect> ui;
     Core::System& system;
     Validation validation;
+    QFuture<void> connect_future;
+    std::mutex connection_lock;
+    std::condition_variable cv_connect;
 };

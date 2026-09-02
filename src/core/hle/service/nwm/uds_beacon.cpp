@@ -12,6 +12,7 @@
 #include "common/assert.h"
 #include "core/hle/service/nwm/nwm_uds.h"
 #include "core/hle/service/nwm/uds_beacon.h"
+#include "core/hw/aes/key.h"
 
 namespace Service::NWM {
 
@@ -212,10 +213,11 @@ std::vector<u8> GeneratedEncryptedData(const NetworkInfo& network_info, const No
     std::memcpy(buffer.data(), hash.data(), hash.size());
 
     // Encrypt the data using AES-CTR and the NWM beacon key.
+    auto key = HW::AES::GetNormalKey(HW::AES::KeySlotID::UDSDataKey);
     using CryptoPP::AES;
     std::array<u8, AES::BLOCKSIZE> counter = GetBeaconCryptoCTR(network_info);
     CryptoPP::CTR_Mode<AES>::Encryption aes;
-    aes.SetKeyWithIV(nwm_beacon_key.data(), AES::BLOCKSIZE, counter.data());
+    aes.SetKeyWithIV(key.data(), AES::BLOCKSIZE, counter.data());
     aes.ProcessData(buffer.data(), buffer.data(), buffer.size());
 
     return buffer;
@@ -223,10 +225,11 @@ std::vector<u8> GeneratedEncryptedData(const NetworkInfo& network_info, const No
 
 void DecryptBeacon(const NetworkInfo& network_info, std::vector<u8>& buffer) {
     // Decrypt the data using AES-CTR and the NWM beacon key.
+    auto key = HW::AES::GetNormalKey(HW::AES::KeySlotID::UDSDataKey);
     using CryptoPP::AES;
     std::array<u8, AES::BLOCKSIZE> counter = GetBeaconCryptoCTR(network_info);
     CryptoPP::CTR_Mode<AES>::Decryption aes;
-    aes.SetKeyWithIV(nwm_beacon_key.data(), AES::BLOCKSIZE, counter.data());
+    aes.SetKeyWithIV(key.data(), AES::BLOCKSIZE, counter.data());
     aes.ProcessData(buffer.data(), buffer.data(), buffer.size());
 }
 

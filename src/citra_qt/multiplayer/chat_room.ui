@@ -28,7 +28,7 @@
         <bool>true</bool>
        </property>
        <property name="textInteractionFlags">
-        <set>Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
+        <set>Qt::TextSelectableByMouse</set>
        </property>
       </widget>
      </item>
@@ -45,6 +45,9 @@
         <widget class="QPushButton" name="send_message">
          <property name="text">
           <string>Send Message</string>
+         </property>
+         <property name="focusPolicy">
+          <set>Qt::NoFocus</set>
          </property>
         </widget>
        </item>

@@ -10,6 +10,7 @@
 #include <sstream>
 #include <thread>
 #include "common/logging/log.h"
+#include "common/web_util.h"
 #include "enet/enet.h"
 #include "network/packet.h"
 #include "network/room.h"
@@ -41,6 +42,7 @@ public:
         /// Data of the user, often including authenticated forum username.
         VerifyUser::UserData user_data;
         ENetPeer* peer; ///< The remote peer.
+        DeviceType device_type; ///< The device type the user is on.
     };
     using MemberList = std::vector<Member>;
     MemberList members;              ///< Information about the members of this room
@@ -328,6 +330,9 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
     std::string token;
     packet >> token;
 
+    DeviceType device_type;
+    packet.Read(&device_type, sizeof(DeviceType));
+
     if (pass != password) {
         SendWrongPassword(event->peer);
         return;
@@ -365,6 +370,7 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
     member.console_id_hash = console_id_hash;
     member.nickname = nickname;
     member.peer = event->peer;
+    member.device_type = device_type;
 
     std::string uid;
     {
@@ -828,6 +834,7 @@ void Room::RoomImpl::BroadcastRoomInformation() {
             packet << member.user_data.username;
             packet << member.user_data.display_name;
             packet << member.user_data.avatar_url;
+            packet << static_cast<u8>(member.device_type);
         }
     }
 
@@ -887,10 +894,8 @@ void Room::RoomImpl::HandleWifiPacket(const ENetEvent* event) {
             enet_peer_send(member->peer, 0, enet_packet);
         } else {
             LOG_ERROR(Network,
-                      "Attempting to send to unknown MAC address: "
-                      "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                      destination_address[0], destination_address[1], destination_address[2],
-                      destination_address[3], destination_address[4], destination_address[5]);
+                      "Attempting to send to unknown MAC address: {}",
+                      Common::MacToString(destination_address));
             enet_packet_destroy(enet_packet);
         }
     }
@@ -940,10 +945,10 @@ void Room::RoomImpl::HandleChatPacket(const ENetEvent* event) {
     enet_host_flush(server);
 
     if (sending_member->user_data.username.empty()) {
-        LOG_INFO(Network, "{}: {}", sending_member->nickname, message);
+        //LOG_INFO(Network, "{}: {}", sending_member->nickname, message);
     } else {
-        LOG_INFO(Network, "{} ({}): {}", sending_member->nickname,
-                 sending_member->user_data.username, message);
+        //LOG_INFO(Network, "{} ({}): {}", sending_member->nickname,
+        //         sending_member->user_data.username, message);
     }
 }
 
@@ -1067,17 +1072,18 @@ Room::BanList Room::GetBanList() const {
     return {room_impl->username_ban_list, room_impl->ip_ban_list};
 }
 
-std::vector<Room::Member> Room::GetRoomMemberList() const {
-    std::vector<Room::Member> member_list;
+std::vector<MemberInformation> Room::GetRoomMemberList() const {
+    std::vector<MemberInformation> member_list;
     std::lock_guard lock(room_impl->member_mutex);
     for (const auto& member_impl : room_impl->members) {
-        Member member;
+        MemberInformation member;
         member.nickname = member_impl.nickname;
         member.username = member_impl.user_data.username;
         member.display_name = member_impl.user_data.display_name;
         member.avatar_url = member_impl.user_data.avatar_url;
         member.mac_address = member_impl.mac_address;
         member.game_info = member_impl.game_info;
+        member.device_type = member_impl.device_type;
         member_list.push_back(member);
     }
     return member_list;

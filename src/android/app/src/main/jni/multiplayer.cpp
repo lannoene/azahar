@@ -180,7 +180,7 @@ NetPlayStatus AndroidMultiplayer::NetPlayCreateRoom(const std::string& ipaddress
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     member->Join(username, Service::CFG::GetConsoleIdHash(system), ipaddress.c_str(), port, 0,
-                 Network::NoPreferredMac, password);
+                 Service::CFG::GetConsoleMacAddress(system), password);
 
     // Failsafe timer to avoid joining before creation
     for (int i = 0; i < 5; i++) {
@@ -209,7 +209,7 @@ NetPlayStatus AndroidMultiplayer::NetPlayJoinRoom(const std::string& ipaddress, 
     }
 
     member->Join(username, Service::CFG::GetConsoleIdHash(system), ipaddress.c_str(), port, 0,
-                 Network::NoPreferredMac, password);
+                 Service::CFG::GetConsoleMacAddress(system), password);
 
     // Wait a bit for the connection and join process to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(500));

@@ -49,12 +49,18 @@
          <property name="visible">
           <bool>true</bool>
          </property>
+         <property name="focusPolicy">
+          <set>Qt::NoFocus</set>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="disconnect">
          <property name="text">
           <string>Leave Room</string>
+         </property>
+         <property name="focusPolicy">
+          <set>Qt::NoFocus</set>
          </property>
         </widget>
        </item>

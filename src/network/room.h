@@ -13,7 +13,7 @@
 
 namespace Network {
 
-constexpr u32 network_version = 4; ///< The version of this Room and RoomMember
+constexpr u32 network_version = 5; ///< The version of this Room and RoomMember
 
 constexpr u16 DefaultRoomPort = 24872;
 
@@ -37,6 +37,13 @@ struct RoomInformation {
 struct GameInfo {
     std::string name{""};
     u64 id{0};
+};
+
+enum class DeviceType : u8 {
+    Unknown = 0,
+    Computer,
+    Phone,
+    Nintendo3DS,
 };
 
 using MacAddress = std::array<u8, 6>;
@@ -86,21 +93,23 @@ enum StatusMessageTypes : u8 {
     IdAddressUnbanned, ///< A username / ip address is unbanned from the room
 };
 
+struct MemberInformation {
+    std::string nickname;     ///< Nickname of the member.
+    std::string username;     ///< The web services username of the member. Can be empty.
+    std::string display_name; ///< The web services display name of the member. Can be empty.
+    std::string avatar_url;   ///< Url to the member's avatar. Can be empty.
+    GameInfo game_info;     ///< Name of the game they're currently playing, or empty if they're
+                            /// not playing anything.
+    MacAddress mac_address; ///< MAC address associated with this member.
+    DeviceType device_type;   ///< The type of device the user is playing on.
+};
+
 /// This is what a server [person creating a server] would use.
 class Room final {
 public:
     enum class State : u8 {
         Open,   ///< The room is open and ready to accept connections.
         Closed, ///< The room is not opened and can not accept connections.
-    };
-
-    struct Member {
-        std::string nickname;     ///< The nickname of the member.
-        std::string username;     ///< The web services username of the member. Can be empty.
-        std::string display_name; ///< The web services display name of the member. Can be empty.
-        std::string avatar_url;   ///< Url to the member's avatar. Can be empty.
-        GameInfo game_info;       ///< The current game of the member
-        MacAddress mac_address;   ///< The assigned mac address of the member.
     };
 
     Room();
@@ -122,9 +131,9 @@ public:
     std::string GetVerifyUID() const;
 
     /**
-     * Gets a list of the mbmers connected to the room.
+     * Gets a list of the mebmers connected to the room.
      */
-    std::vector<Member> GetRoomMemberList() const;
+    std::vector<MemberInformation> GetRoomMemberList() const;
 
     /**
      * Checks if the room is password protected

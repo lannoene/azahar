@@ -33,4 +33,16 @@ struct URLInfo {
     std::string path; ///< Resource path.
 };
 URLInfo SplitUrl(const std::string& url);
+
+inline std::string MacToString(u64 mac) {
+    return fmt::format("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", (mac >> (5 * 8)) & 0xFF,
+                       (mac >> (4 * 8)) & 0xFF, (mac >> (3 * 8)) & 0xFF, (mac >> (2 * 8)) & 0xFF,
+                       (mac >> (1 * 8)) & 0xFF, (mac >> (0 * 8)) & 0xFF);
+}
+
+inline std::string MacToString(const std::array<u8, 6>& mac) {
+    u64 mac_u64 = u64(mac[0]) << 40 | u64(mac[1]) << 32 | u64(mac[2]) << 24 | u64(mac[3]) << 16 |
+                  u64(mac[4]) << 8 | u64(mac[5]);
+    return MacToString(mac_u64);
+}
 } // namespace Common
