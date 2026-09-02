@@ -85,17 +85,25 @@ void DirectConnectWindow::Connect() {
         !ui->port->text().isEmpty() ? ui->port->text() : UISettings::values.port;
 
     // attempt to connect in a different thread
-    QFuture<void> f = QtConcurrent::run([&] {
+    connect_future = QtConcurrent::run([&] {
         if (auto room_member = Network::GetRoomMember().lock()) {
+            std::unique_lock lock(connection_lock);
             auto port = UISettings::values.port.toUInt();
-            room_member->Join(ui->nickname->text().toStdString(),
-                              Service::CFG::GetConsoleIdHash(system),
-                              ui->ip->text().toStdString().c_str(), port, 0,
-                              Service::CFG::GetConsoleMacAddress(system),
-                              ui->password->text().toStdString().c_str());
+            auto on_state_change = room_member->BindOnStateChanged([this](const Network::RoomMember::State& state) { OnStateChange(state); } );
+            auto on_error = room_member->BindOnError([this](auto error) { OnConnectionError(error); } );
+            auto connected = room_member->Join(ui->nickname->text().toStdString(),
+                                               Service::CFG::GetConsoleIdHash(system),
+                                               ui->ip->text().toStdString().c_str(), port, 0,
+                                               Service::CFG::GetConsoleMacAddress(system),
+                                               ui->password->text().toStdString().c_str());
+            if (connected) {
+                cv_connect.wait(lock); // wait for authentication ack
+            }
+            room_member->Unbind(on_state_change);
+            room_member->Unbind(on_error);
         }
     });
-    watcher->setFuture(f);
+    watcher->setFuture(connect_future);
     // and disable widgets and display a connecting while we wait
     BeginConnecting();
 }
@@ -119,5 +127,26 @@ void DirectConnectWindow::OnConnection() {
 
             close();
         }
+    }
+}
+
+void DirectConnectWindow::OnStateChange(const Network::RoomMember::State& state) {
+    // these states require an extra wait for another connection event
+    if (state == Network::RoomMember::State::Joined ||
+        state == Network::RoomMember::State::Moderator) {
+        // we lock this to wait for the condition_variable to begin
+        // waiting
+        std::unique_lock lock(connection_lock);
+        cv_connect.notify_one();
+    }
+}
+
+void DirectConnectWindow::OnConnectionError(const Network::RoomMember::Error& error) {
+    // these errors are set on the current thread, so they could cause deadlocks
+    if (error != Network::RoomMember::Error::CouldNotConnect &&
+        error != Network::RoomMember::Error::UnknownError) {
+
+        std::unique_lock lock(connection_lock);
+        cv_connect.notify_one();
     }
 }

@@ -110,7 +110,7 @@ void NWM_UDS::BroadcastNodeMap() {
     auto node_can_broad = [](auto& node) -> bool {
         return node.second.connected && !node.second.spec;
     };
-    std::size_t num_entries =
+    u32 num_entries =
         std::count_if(node_map.begin(), node_map.end(),
                       [&node_can_broad](const auto& node) { return node_can_broad(node); });
     using node_t = decltype(node_map)::value_type;
@@ -138,7 +138,7 @@ void NWM_UDS::HandleNodeMapPacket(const Network::WifiPacket& packet) {
     }
 
     node_map.clear();
-    std::size_t num_entries;
+    u32 num_entries;
     Network::MacAddress address;
     u16 id;
     std::memcpy(&num_entries, packet.data.data(), sizeof(num_entries));
@@ -363,6 +363,7 @@ void NWM_UDS::HandleSecureDataPacket(const Network::WifiPacket& packet) {
 
     if (secure_data.src_node_id == connection_status.network_node_id) {
         // Ignore packets that came from ourselves.
+        LOG_TRACE(Service_NWM, "Ignoring packet because it came from ourself");
         return;
     }
 
@@ -397,11 +398,13 @@ void NWM_UDS::HandleSecureDataPacket(const Network::WifiPacket& packet) {
     auto channel_info = channel_data.find(secure_data.data_channel);
     // Ignore packets from channels we're not interested in.
     if (channel_info == channel_data.end()) {
+        LOG_INFO(Service_NWM, "Ignoring packet: could not find data channel for {:#x}", secure_data.data_channel);
         return;
     }
 
     if (channel_info->second.network_node_id != BroadcastNetworkNodeId &&
         channel_info->second.network_node_id != secure_data.src_node_id) {
+        LOG_INFO(Service_NWM, "Ignoring packet: was not addressed to us {:#x} = {:#x}", static_cast<u16>(secure_data.src_node_id), static_cast<u16>(channel_info->second.network_node_id));
         return;
     }
 
@@ -1331,7 +1334,7 @@ Common::Expected<int, ResultStatus> NWM_UDS::PullPacketHLE(u32 bind_node_id, u32
     }
 
     if (data_size > max_out_buff_size) {
-        LOG_ERROR(Service_NWM, "Data size was too large.");
+        LOG_ERROR(Service_NWM, "Data size was too large {} ({:#x} > {:#x})", data_size, data_size, max_out_buff_size);
         return Common::Unexpected(ResultStatus::RecvError_PacketSizeTooLarge);
     }
     output_buffer.resize(buff_size);

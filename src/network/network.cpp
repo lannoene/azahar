@@ -47,4 +47,14 @@ void Shutdown() {
     LOG_DEBUG(Network, "shutdown OK");
 }
 
+DeviceType GetCurrentDeviceType() {
+#ifdef ENABLE_QT
+    return DeviceType::Computer;
+#endif
+#ifdef ANDROID
+    return DeviceType::Phone;
+#endif
+    return DeviceType::Unknown;
+}
+
 } // namespace Network

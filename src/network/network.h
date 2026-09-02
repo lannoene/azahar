@@ -22,4 +22,6 @@ std::weak_ptr<RoomMember> GetRoomMember();
 /// Unregisters the network device, the room, and the room member and shut them down.
 void Shutdown();
 
+DeviceType GetCurrentDeviceType();
+
 } // namespace Network

@@ -96,15 +96,6 @@ public:
         NoSuchUser,       ///< The nickname the user attempts to kick/ban does not exist
     };
 
-    struct MemberInformation {
-        std::string nickname;     ///< Nickname of the member.
-        std::string username;     ///< The web services username of the member. Can be empty.
-        std::string display_name; ///< The web services display name of the member. Can be empty.
-        std::string avatar_url;   ///< Url to the member's avatar. Can be empty.
-        GameInfo game_info;     ///< Name of the game they're currently playing, or empty if they're
-                                /// not playing anything.
-        MacAddress mac_address; ///< MAC address associated with this member.
-    };
     using MemberList = std::vector<MemberInformation>;
 
     // The handle for the callback functions
@@ -160,8 +151,9 @@ public:
      * Attempts to join a room at the specified address and port, using the specified nickname.
      * A console ID hash is passed in to check console ID conflicts.
      * This may fail if the username or console ID is already taken.
+     * @return Whether the enet connection succeeded and the client may wait for authentication.
      */
-    void Join(const std::string& nickname, const std::string& console_id_hash,
+    bool Join(const std::string& nickname, const std::string& console_id_hash,
               const char* server_addr = "127.0.0.1", u16 server_port = DefaultRoomPort,
               u16 client_port = 0, const MacAddress& preferred_mac = NoPreferredMac,
               const std::string& password = "", const std::string& token = "");

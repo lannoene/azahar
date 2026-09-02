@@ -12,6 +12,7 @@
 #include "enet/enet.h"
 #include "network/packet.h"
 #include "network/room_member.h"
+#include "network/network.h"
 
 namespace Network {
 
@@ -290,6 +291,8 @@ void RoomMember::RoomMemberImpl::SendJoinRequest(const std::string& nickname,
     packet << network_version;
     packet << password;
     packet << token;
+    // todo: replace this with the actual current platform
+    packet << static_cast<u8>(GetCurrentDeviceType());
     Send(std::move(packet));
 }
 
@@ -326,6 +329,7 @@ void RoomMember::RoomMemberImpl::HandleRoomInformationPacket(const ENetEvent* ev
         packet >> member.username;
         packet >> member.display_name;
         packet >> member.avatar_url;
+        packet >> *reinterpret_cast<u8*>(&member.device_type);
 
         {
             std::lock_guard lock(username_mutex);
@@ -536,7 +540,7 @@ RoomInformation RoomMember::GetRoomInformation() const {
     return room_member_impl->room_information;
 }
 
-void RoomMember::Join(const std::string& nick, const std::string& console_id_hash,
+bool RoomMember::Join(const std::string& nick, const std::string& console_id_hash,
                       const char* server_addr, u16 server_port, u16 client_port,
                       const MacAddress& preferred_mac, const std::string& password,
                       const std::string& token) {
@@ -565,7 +569,7 @@ void RoomMember::Join(const std::string& nick, const std::string& console_id_has
     if (!room_member_impl->server) {
         room_member_impl->SetState(State::Idle);
         room_member_impl->SetError(Error::UnknownError);
-        return;
+        return false;
     }
 
     ENetEvent event{};
@@ -575,10 +579,12 @@ void RoomMember::Join(const std::string& nick, const std::string& console_id_has
         room_member_impl->StartLoop();
         room_member_impl->SendJoinRequest(nick, console_id_hash, preferred_mac, password, token);
         SendGameInfo(room_member_impl->current_game_info);
+        return true;
     } else {
         enet_peer_disconnect(room_member_impl->server, 0);
         room_member_impl->SetState(State::Idle);
         room_member_impl->SetError(Error::CouldNotConnect);
+        return false;
     }
 }
 
