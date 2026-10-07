@@ -11,8 +11,7 @@
 #include <thread>
 #include "common/logging/log.h"
 #include "common/web_util.h"
-#include "enet/enet.h"
-#include "network/packet.h"
+#include "netpc/pcall_host.h"
 #include "network/room.h"
 #include "network/verify_user.h"
 
@@ -24,7 +23,7 @@ public:
     const MacAddress NintendoOUI;
     std::mt19937 random_gen; ///< Random number generator. Used for GenerateMacAddress
 
-    ENetHost* server = nullptr; ///< Network interface.
+    std::shared_ptr<PC_Host> server = nullptr; ///< Network interface.
 
     std::atomic<State> state{State::Closed}; ///< Current state of the room.
     RoomInformation room_information;        ///< Information about this room.
@@ -41,7 +40,7 @@ public:
         MacAddress mac_address;      ///< The assigned mac address of the member.
         /// Data of the user, often including authenticated forum username.
         VerifyUser::UserData user_data;
-        ENetPeer* peer; ///< The remote peer.
+        std::shared_ptr<PC_Host::Client> peer; ///< The remote peer.
         DeviceType device_type; ///< The device type the user is on.
     };
     using MemberList = std::vector<Member>;
@@ -71,31 +70,31 @@ public:
      * Validates the uniqueness of the username and assigns the MAC address
      * that the client will use for the remainder of the connection.
      */
-    void HandleJoinRequest(const ENetEvent* event);
+    void HandleJoinRequest(PC_Event* event);
 
     /**
      * Parses and answers a kick request from a client.
      * Validates the permissions and that the given user exists and then kicks the member.
      */
-    void HandleModKickPacket(const ENetEvent* event);
+    void HandleModKickPacket(PC_Event* event);
 
     /**
      * Parses and answers a ban request from a client.
      * Validates the permissions and bans the user (by forum username or IP).
      */
-    void HandleModBanPacket(const ENetEvent* event);
+    void HandleModBanPacket(PC_Event* event);
 
     /**
      * Parses and answers a unban request from a client.
      * Validates the permissions and unbans the address.
      */
-    void HandleModUnbanPacket(const ENetEvent* event);
+    void HandleModUnbanPacket(PC_Event* event);
 
     /**
      * Parses and answers a get ban list request from a client.
      * Validates the permissions and returns the ban list.
      */
-    void HandleModGetBanListPacket(const ENetEvent* event);
+    void HandleModGetBanListPacket(PC_Event* event);
 
     /**
      * Returns whether the nickname is valid, ie. isn't already taken by someone else in the room.
@@ -117,76 +116,76 @@ public:
     /**
      * Returns whether a user has mod permissions.
      */
-    bool HasModPermission(const ENetPeer* client) const;
+    bool HasModPermission(std::shared_ptr<BasePeer> client) const;
 
     /**
      * Sends a ID_ROOM_IS_FULL message telling the client that the room is full.
      */
-    void SendRoomIsFull(ENetPeer* client);
+    void SendRoomIsFull(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a ID_ROOM_NAME_COLLISION message telling the client that the name is invalid.
      */
-    void SendNameCollision(ENetPeer* client);
+    void SendNameCollision(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a ID_ROOM_MAC_COLLISION message telling the client that the MAC is invalid.
      */
-    void SendMacCollision(ENetPeer* client);
+    void SendMacCollision(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a IdConsoleIdCollison message telling the client that another member with the same
      * console ID exists.
      */
-    void SendConsoleIdCollision(ENetPeer* client);
+    void SendConsoleIdCollision(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a ID_ROOM_VERSION_MISMATCH message telling the client that the version is invalid.
      */
-    void SendVersionMismatch(ENetPeer* client);
+    void SendVersionMismatch(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a ID_ROOM_WRONG_PASSWORD message telling the client that the password is wrong.
      */
-    void SendWrongPassword(ENetPeer* client);
+    void SendWrongPassword(std::shared_ptr<BasePeer> client);
 
     /**
      * Notifies the member that its connection attempt was successful,
      * and it is now part of the room.
      */
-    void SendJoinSuccess(ENetPeer* client, MacAddress mac_address);
+    void SendJoinSuccess(std::shared_ptr<BasePeer> client, MacAddress mac_address);
 
     /**
      * Notifies the member that its connection attempt was successful,
      * and it is now part of the room, and it has been granted mod permissions.
      */
-    void SendJoinSuccessAsMod(ENetPeer* client, MacAddress mac_address);
+    void SendJoinSuccessAsMod(std::shared_ptr<BasePeer> client, MacAddress mac_address);
 
     /**
      * Sends a IdHostKicked message telling the client that they have been kicked.
      */
-    void SendUserKicked(ENetPeer* client);
+    void SendUserKicked(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a IdHostBanned message telling the client that they have been banned.
      */
-    void SendUserBanned(ENetPeer* client);
+    void SendUserBanned(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a IdModPermissionDenied message telling the client that they do not have mod
      * permission.
      */
-    void SendModPermissionDenied(ENetPeer* client);
+    void SendModPermissionDenied(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends a IdModNoSuchUser message telling the client that the given user could not be found.
      */
-    void SendModNoSuchUser(ENetPeer* client);
+    void SendModNoSuchUser(std::shared_ptr<BasePeer> client);
 
     /**
      * Sends the ban list in response to a client's request for getting ban list.
      */
-    void SendModBanListResponse(ENetPeer* client);
+    void SendModBanListResponse(std::shared_ptr<BasePeer> client);
 
     /**
      * Notifies the members that the room is closed,
@@ -227,35 +226,36 @@ public:
      * Broadcasts this packet to all members except the sender.
      * @param event The ENet event containing the data
      */
-    void HandleWifiPacket(const ENetEvent* event);
+    void HandleWifiPacket(PC_Event* event);
 
     /**
      * Extracts a chat entry from a received ENet packet and adds it to the chat queue.
      * @param event The ENet event that was received.
      */
-    void HandleChatPacket(const ENetEvent* event);
+    void HandleChatPacket(PC_Event* event);
 
     /**
      * Extracts the game name from a received ENet packet and broadcasts it.
      * @param event The ENet event that was received.
      */
-    void HandleGameNamePacket(const ENetEvent* event);
+    void HandleGameNamePacket(PC_Event* event);
 
     /**
      * Removes the client from the members list if it was in it and announces the change
      * to all other clients.
      */
-    void HandleClientDisconnection(ENetPeer* client);
+    void HandleClientDisconnection(std::shared_ptr<BasePeer> client);
 };
 
 // RoomImpl
 void Room::RoomImpl::ServerLoop() {
     while (state != State::Closed) {
-        ENetEvent event;
-        if (enet_host_service(server, &event, 16) > 0) {
+        PC_Event event;
+        if (server->Service(event, 16) > 0) {
             switch (event.type) {
-            case ENET_EVENT_TYPE_RECEIVE:
-                switch (event.packet->data[0]) {
+            case PC_EV_TYPE_RECEIVE: {
+                auto packet_type = reinterpret_cast<const u8*>(event.pk.GetData())[0];
+                switch (packet_type) {
                 case IdJoinRequest:
                     HandleJoinRequest(&event);
                     break;
@@ -282,13 +282,13 @@ void Room::RoomImpl::ServerLoop() {
                     HandleModGetBanListPacket(&event);
                     break;
                 }
-                enet_packet_destroy(event.packet);
                 break;
-            case ENET_EVENT_TYPE_DISCONNECT:
+            }
+            case PC_EV_TYPE_DISCONNECT:
                 HandleClientDisconnection(event.peer);
                 break;
-            case ENET_EVENT_TYPE_NONE:
-            case ENET_EVENT_TYPE_CONNECT:
+            case PC_EV_TYPE_NONE:
+            case PC_EV_TYPE_CONNECT:
                 break;
             }
         }
@@ -301,7 +301,7 @@ void Room::RoomImpl::StartLoop() {
     room_thread = std::make_unique<std::thread>(&Room::RoomImpl::ServerLoop, this);
 }
 
-void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
+void Room::RoomImpl::HandleJoinRequest(PC_Event* event) {
     {
         std::lock_guard lock(member_mutex);
         if (members.size() >= room_information.member_slots) {
@@ -309,8 +309,7 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
             return;
         }
     }
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+    NetPC::Packet& packet = event->pk;
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
     std::string nickname;
     packet >> nickname;
@@ -369,7 +368,7 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
     member.mac_address = preferred_mac;
     member.console_id_hash = console_id_hash;
     member.nickname = nickname;
-    member.peer = event->peer;
+    member.peer = std::static_pointer_cast<PC_Host::Client>(event->peer);
     member.device_type = device_type;
 
     std::string uid;
@@ -397,7 +396,7 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
             return;
         }
 
-        // Check IP ban
+        /*// Check IP ban
         char ip_raw[256];
         enet_address_get_host_ip(&event->peer->address, ip_raw, sizeof(ip_raw) - 1);
         ip = ip_raw;
@@ -405,7 +404,7 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
         if (std::find(ip_ban_list.begin(), ip_ban_list.end(), ip) != ip_ban_list.end()) {
             SendUserBanned(event->peer);
             return;
-        }
+        }*/
     }
 
     // Notify everyone that the user has joined.
@@ -425,14 +424,13 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
     }
 }
 
-void Room::RoomImpl::HandleModKickPacket(const ENetEvent* event) {
+void Room::RoomImpl::HandleModKickPacket(PC_Event *event) {
     if (!HasModPermission(event->peer)) {
         SendModPermissionDenied(event->peer);
         return;
     }
 
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+    NetPC::Packet& packet = event->pk;
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
 
     std::string nickname;
@@ -454,11 +452,11 @@ void Room::RoomImpl::HandleModKickPacket(const ENetEvent* event) {
 
         username = target_member->user_data.username;
 
-        char ip_raw[256];
+        /*char ip_raw[256];
         enet_address_get_host_ip(&target_member->peer->address, ip_raw, sizeof(ip_raw) - 1);
         ip = ip_raw;
 
-        enet_peer_disconnect(target_member->peer, 0);
+        enet_peer_disconnect(target_member->peer, 0);*/
         members.erase(target_member);
     }
 
@@ -467,14 +465,13 @@ void Room::RoomImpl::HandleModKickPacket(const ENetEvent* event) {
     BroadcastRoomInformation();
 }
 
-void Room::RoomImpl::HandleModBanPacket(const ENetEvent* event) {
+void Room::RoomImpl::HandleModBanPacket(PC_Event* event) {
     if (!HasModPermission(event->peer)) {
         SendModPermissionDenied(event->peer);
         return;
     }
 
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+    NetPC::Packet& packet = event->pk;
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
 
     std::string nickname;
@@ -497,11 +494,9 @@ void Room::RoomImpl::HandleModBanPacket(const ENetEvent* event) {
         nickname = target_member->nickname;
         username = target_member->user_data.username;
 
-        char ip_raw[256];
-        enet_address_get_host_ip(&target_member->peer->address, ip_raw, sizeof(ip_raw) - 1);
-        ip = ip_raw;
+        // ip = target_member->peer->GetIpAddress();
 
-        enet_peer_disconnect(target_member->peer, 0);
+        //target_member->peer->Disconnect();
         members.erase(target_member);
     }
 
@@ -528,14 +523,13 @@ void Room::RoomImpl::HandleModBanPacket(const ENetEvent* event) {
     BroadcastRoomInformation();
 }
 
-void Room::RoomImpl::HandleModUnbanPacket(const ENetEvent* event) {
+void Room::RoomImpl::HandleModUnbanPacket(PC_Event* event) {
     if (!HasModPermission(event->peer)) {
         SendModPermissionDenied(event->peer);
         return;
     }
 
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+    NetPC::Packet& packet = event->pk;
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
 
     std::string address;
@@ -565,7 +559,7 @@ void Room::RoomImpl::HandleModUnbanPacket(const ENetEvent* event) {
     }
 }
 
-void Room::RoomImpl::HandleModGetBanListPacket(const ENetEvent* event) {
+void Room::RoomImpl::HandleModGetBanListPacket(PC_Event* event) {
     if (!HasModPermission(event->peer)) {
         SendModPermissionDenied(event->peer);
         return;
@@ -601,7 +595,7 @@ bool Room::RoomImpl::IsValidConsoleId(const std::string& console_id_hash) const 
     });
 }
 
-bool Room::RoomImpl::HasModPermission(const ENetPeer* client) const {
+bool Room::RoomImpl::HasModPermission(std::shared_ptr<BasePeer> client) const {
     std::lock_guard lock(member_mutex);
     const auto sending_member =
         std::find_if(members.begin(), members.end(),
@@ -621,129 +615,95 @@ bool Room::RoomImpl::HasModPermission(const ENetPeer* client) const {
     return false;
 }
 
-void Room::RoomImpl::SendNameCollision(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendNameCollision(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdNameCollision);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendMacCollision(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendMacCollision(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdMacCollision);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendConsoleIdCollision(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendConsoleIdCollision(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdConsoleIdCollision);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendWrongPassword(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendWrongPassword(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdWrongPassword);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendRoomIsFull(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendRoomIsFull(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdRoomIsFull);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendVersionMismatch(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendVersionMismatch(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdVersionMismatch);
     packet << network_version;
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendJoinSuccess(ENetPeer* client, MacAddress mac_address) {
-    Packet packet;
+void Room::RoomImpl::SendJoinSuccess(std::shared_ptr<BasePeer> client, MacAddress mac_address) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdJoinSuccess);
     packet << mac_address;
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendJoinSuccessAsMod(ENetPeer* client, MacAddress mac_address) {
-    Packet packet;
+void Room::RoomImpl::SendJoinSuccessAsMod(std::shared_ptr<BasePeer> client, MacAddress mac_address) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdJoinSuccessAsMod);
     packet << mac_address;
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendUserKicked(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendUserKicked(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdHostKicked);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendUserBanned(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendUserBanned(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdHostBanned);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendModPermissionDenied(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendModPermissionDenied(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdModPermissionDenied);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendModNoSuchUser(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendModNoSuchUser(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdModNoSuchUser);
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
-void Room::RoomImpl::SendModBanListResponse(ENetPeer* client) {
-    Packet packet;
+void Room::RoomImpl::SendModBanListResponse(std::shared_ptr<BasePeer> client) {
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdModBanListResponse);
     {
         std::lock_guard lock(ban_list_mutex);
@@ -751,45 +711,36 @@ void Room::RoomImpl::SendModBanListResponse(ENetPeer* client) {
         packet << ip_ban_list;
     }
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(client, 0, enet_packet);
-    enet_host_flush(server);
+    client->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
 }
 
 void Room::RoomImpl::SendCloseMessage() {
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdCloseRoom);
     std::lock_guard lock(member_mutex);
     if (!members.empty()) {
-        ENetPacket* enet_packet =
-            enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
         for (auto& member : members) {
-            enet_peer_send(member.peer, 0, enet_packet);
+            member.peer->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
         }
     }
-    enet_host_flush(server);
     for (auto& member : members) {
-        enet_peer_disconnect(member.peer, 0);
+        //member.peer->Disconnect();
     }
 }
 
 void Room::RoomImpl::SendStatusMessage(StatusMessageTypes type, const std::string& nickname,
                                        const std::string& username, const std::string& ip) {
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdStatusMessage);
     packet << static_cast<u8>(type);
     packet << nickname;
     packet << username;
-    std::lock_guard lock(member_mutex);
-    if (!members.empty()) {
-        ENetPacket* enet_packet =
-            enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
+    {
+        std::lock_guard lock(member_mutex);
         for (auto& member : members) {
-            enet_peer_send(member.peer, 0, enet_packet);
+            member.peer->SendPacket(packet, PC_SEND_FLAG_RELIABLE);
         }
     }
-    enet_host_flush(server);
 
     const std::string display_name =
         username.empty() ? nickname : fmt::format("{} ({})", nickname, username);
@@ -814,7 +765,7 @@ void Room::RoomImpl::SendStatusMessage(StatusMessageTypes type, const std::strin
 }
 
 void Room::RoomImpl::BroadcastRoomInformation() {
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdRoomInformation);
     packet << room_information.name;
     packet << room_information.description;
@@ -838,10 +789,7 @@ void Room::RoomImpl::BroadcastRoomInformation() {
         }
     }
 
-    ENetPacket* enet_packet =
-        enet_packet_create(packet.GetData(), packet.GetDataSize(), ENET_PACKET_FLAG_RELIABLE);
-    enet_host_broadcast(server, 0, enet_packet);
-    enet_host_flush(server);
+    server->BroadcastPacket(packet, PC_SEND_FLAG_RELIABLE, nullptr);
 }
 
 MacAddress Room::RoomImpl::GenerateMacAddress() {
@@ -856,9 +804,8 @@ MacAddress Room::RoomImpl::GenerateMacAddress() {
     return result_mac;
 }
 
-void Room::RoomImpl::HandleWifiPacket(const ENetEvent* event) {
-    Packet in_packet;
-    in_packet.Append(event->packet->data, event->packet->dataLength);
+void Room::RoomImpl::HandleWifiPacket(PC_Event* event) {
+    NetPC::Packet& in_packet = event->pk;
     in_packet.IgnoreBytes(sizeof(u8));         // Message type
     in_packet.IgnoreBytes(sizeof(u8));         // WifiPacket Type
     in_packet.IgnoreBytes(sizeof(u8));         // WifiPacket Channel
@@ -866,24 +813,10 @@ void Room::RoomImpl::HandleWifiPacket(const ENetEvent* event) {
     MacAddress destination_address;
     in_packet >> destination_address;
 
-    Packet out_packet;
-    out_packet.Append(event->packet->data, event->packet->dataLength);
-    ENetPacket* enet_packet = enet_packet_create(out_packet.GetData(), out_packet.GetDataSize(),
-                                                 ENET_PACKET_FLAG_RELIABLE);
-
     if (destination_address == BroadcastMac) { // Send the data to everyone except the sender
         std::lock_guard lock(member_mutex);
-        bool sent_packet = false;
-        for (const auto& member : members) {
-            if (member.peer != event->peer) {
-                sent_packet = true;
-                enet_peer_send(member.peer, 0, enet_packet);
-            }
-        }
 
-        if (!sent_packet) {
-            enet_packet_destroy(enet_packet);
-        }
+        server->BroadcastPacket(in_packet, event->pk_flags, std::static_pointer_cast<PC_Host::Client>(event->peer));
     } else { // Send the data only to the destination client
         std::lock_guard lock(member_mutex);
         auto member = std::find_if(members.begin(), members.end(),
@@ -891,20 +824,17 @@ void Room::RoomImpl::HandleWifiPacket(const ENetEvent* event) {
                                        return member.mac_address == destination_address;
                                    });
         if (member != members.end()) {
-            enet_peer_send(member->peer, 0, enet_packet);
+            member->peer->SendPacket(in_packet, event->pk_flags);
         } else {
             LOG_ERROR(Network,
                       "Attempting to send to unknown MAC address: {}",
                       Common::MacToString(destination_address));
-            enet_packet_destroy(enet_packet);
         }
     }
-    enet_host_flush(server);
 }
 
-void Room::RoomImpl::HandleChatPacket(const ENetEvent* event) {
-    Packet in_packet;
-    in_packet.Append(event->packet->data, event->packet->dataLength);
+void Room::RoomImpl::HandleChatPacket(PC_Event* event) {
+    NetPC::Packet& in_packet = event->pk;
 
     in_packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
     std::string message;
@@ -922,39 +852,28 @@ void Room::RoomImpl::HandleChatPacket(const ENetEvent* event) {
     // Limit the size of chat messages to MaxMessageSize
     message.resize(std::min(static_cast<u32>(message.size()), MaxMessageSize));
 
-    Packet out_packet;
+    NetPC::Packet out_packet;
     out_packet << static_cast<u8>(IdChatMessage);
     out_packet << sending_member->nickname;
     out_packet << sending_member->user_data.username;
     out_packet << message;
 
-    ENetPacket* enet_packet = enet_packet_create(out_packet.GetData(), out_packet.GetDataSize(),
-                                                 ENET_PACKET_FLAG_RELIABLE);
-    bool sent_packet = false;
     for (const auto& member : members) {
         if (member.peer != event->peer) {
-            sent_packet = true;
-            enet_peer_send(member.peer, 0, enet_packet);
+            member.peer->SendPacket(out_packet, PC_SEND_FLAG_RELIABLE);
         }
     }
 
-    if (!sent_packet) {
-        enet_packet_destroy(enet_packet);
-    }
-
-    enet_host_flush(server);
-
     if (sending_member->user_data.username.empty()) {
-        //LOG_INFO(Network, "{}: {}", sending_member->nickname, message);
+        LOG_INFO(Network, "{}: {}", sending_member->nickname, message);
     } else {
-        //LOG_INFO(Network, "{} ({}): {}", sending_member->nickname,
-        //         sending_member->user_data.username, message);
+        LOG_INFO(Network, "{} ({}): {}", sending_member->nickname,
+                 sending_member->user_data.username, message);
     }
 }
 
-void Room::RoomImpl::HandleGameNamePacket(const ENetEvent* event) {
-    Packet in_packet;
-    in_packet.Append(event->packet->data, event->packet->dataLength);
+void Room::RoomImpl::HandleGameNamePacket(PC_Event* event) {
+    NetPC::Packet in_packet = event->pk;
 
     in_packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
     GameInfo game_info;
@@ -985,7 +904,7 @@ void Room::RoomImpl::HandleGameNamePacket(const ENetEvent* event) {
     BroadcastRoomInformation();
 }
 
-void Room::RoomImpl::HandleClientDisconnection(ENetPeer* client) {
+void Room::RoomImpl::HandleClientDisconnection(std::shared_ptr<BasePeer> client) {
     // Remove the client from the members list.
     std::string nickname, username, ip;
     {
@@ -997,16 +916,16 @@ void Room::RoomImpl::HandleClientDisconnection(ENetPeer* client) {
             nickname = member->nickname;
             username = member->user_data.username;
 
-            char ip_raw[256];
+            /*char ip_raw[256];
             enet_address_get_host_ip(&member->peer->address, ip_raw, sizeof(ip_raw) - 1);
-            ip = ip_raw;
+            ip = ip_raw;*/
 
             members.erase(member);
         }
     }
 
     // Announce the change to all clients.
-    enet_peer_disconnect(client, 0);
+    //client->Disconnect();
     if (!nickname.empty())
         SendStatusMessage(IdMemberLeave, nickname, username, ip);
     BroadcastRoomInformation();
@@ -1023,19 +942,17 @@ bool Room::Create(const std::string& name, const std::string& description,
                   const std::string& preferred_game, u64 preferred_game_id,
                   std::unique_ptr<VerifyUser::Backend> verify_backend,
                   const Room::BanList& ban_list) {
-    ENetAddress address;
-    address.host = ENET_HOST_ANY;
-    if (!server_address.empty()) {
-        enet_address_set_host(&address, server_address.c_str());
-    }
-    address.port = server_port;
-
     // In order to send the room is full message to the connecting client, we need to leave one
     // slot open so enet won't reject the incoming connection without telling us
-    room_impl->server = enet_host_create(&address, max_connections + 1, NumChannels, 0, 0);
+    room_impl->server = std::make_shared<PC_Host>();
+    //room_impl->server->SetMaxPeers(max_connections + 1);
+    if (!server_address.empty()) {
+        //room_impl->server->SetIpAddress(server_address);
+    }
     if (!room_impl->server) {
         return false;
     }
+    room_impl->server->Init(server_port);
     room_impl->state = State::Open;
 
     room_impl->room_information.name = name;
@@ -1104,7 +1021,7 @@ void Room::Destroy() {
     room_impl->room_thread.reset();
 
     if (room_impl->server) {
-        enet_host_destroy(room_impl->server);
+        room_impl->server.reset();
     }
     room_impl->room_information = {};
     room_impl->server = nullptr;

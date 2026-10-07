@@ -9,8 +9,7 @@
 #include <set>
 #include <thread>
 #include "common/assert.h"
-#include "enet/enet.h"
-#include "network/packet.h"
+#include "netpc/pcall_client.h"
 #include "network/room_member.h"
 #include "network/network.h"
 
@@ -20,8 +19,8 @@ constexpr u32 ConnectionTimeoutMs = 5000;
 
 class RoomMember::RoomMemberImpl {
 public:
-    ENetHost* client = nullptr; ///< ENet network interface.
-    ENetPeer* server = nullptr; ///< The server peer the client is connected to
+    std::shared_ptr<PC_Client> client = nullptr; ///< ENet network interface.
+    std::shared_ptr<PC_Client::Server> server = nullptr; ///< The server peer the client is connected to
 
     /// Information about the clients connected to the same room as us.
     MemberList member_information;
@@ -47,7 +46,7 @@ public:
     /// Thread that receives and dispatches network packets
     std::unique_ptr<std::thread> loop_thread;
     std::mutex send_list_mutex;  ///< Mutex that controls access to the `send_list` variable.
-    std::list<Packet> send_list; ///< A list that stores all packets to send the async
+    std::list<NetPC::Packet> send_list; ///< A list that stores all packets to send the async
 
     template <typename T>
     using CallbackSet = std::set<CallbackHandle<T>>;
@@ -77,7 +76,7 @@ public:
      * Sends data to the room. It will be send on channel 0 with flag RELIABLE
      * @param packet The data to send
      */
-    void Send(Packet&& packet);
+    void Send(NetPC::Packet&& packet, u32 flags = 0);
 
     /**
      * Sends a request to the server, asking for permission to join a room with the specified
@@ -96,37 +95,37 @@ public:
      * Extracts a MAC Address from a received ENet packet.
      * @param event The ENet event that was received.
      */
-    void HandleJoinPacket(const ENetEvent* event);
+    void HandleJoinPacket(PC_Event* event);
     /**
      * Extracts RoomInformation and MemberInformation from a received ENet packet.
      * @param event The ENet event that was received.
      */
-    void HandleRoomInformationPacket(const ENetEvent* event);
+    void HandleRoomInformationPacket(PC_Event* event);
 
     /**
      * Extracts a WifiPacket from a received ENet packet.
      * @param event The  ENet event that was received.
      */
-    void HandleWifiPackets(const ENetEvent* event);
+    void HandleWifiPackets(PC_Event* event);
 
     /**
      * Extracts a chat entry from a received ENet packet and adds it to the chat queue.
      * @param event The ENet event that was received.
      */
-    void HandleChatPacket(const ENetEvent* event);
+    void HandleChatPacket(PC_Event* event);
 
     /**
      * Extracts a system message entry from a received ENet packet and adds it to the system message
      * queue.
      * @param event The ENet event that was received.
      */
-    void HandleStatusMessagePacket(const ENetEvent* event);
+    void HandleStatusMessagePacket(PC_Event* event);
 
     /**
      * Extracts a ban list request response from a received ENet packet.
      * @param event The ENet event that was received.
      */
-    void HandleModBanListResponsePacket(const ENetEvent* event);
+    void HandleModBanListResponsePacket(PC_Event* event);
 
     /**
      * Disconnects the RoomMember from the Room
@@ -160,11 +159,12 @@ void RoomMember::RoomMemberImpl::MemberLoop() {
     // Receive packets while the connection is open
     while (IsConnected()) {
         std::lock_guard network_lock(network_mutex);
-        ENetEvent event;
-        if (enet_host_service(client, &event, 16) > 0) {
+        PC_Event event;
+        if (client->Service(event, 16) > 0) {
             switch (event.type) {
-            case ENET_EVENT_TYPE_RECEIVE:
-                switch (event.packet->data[0]) {
+            case PC_EV_TYPE_RECEIVE: {
+                auto packet_type = reinterpret_cast<const u8*>(event.pk.GetData())[0];
+                switch (packet_type) {
                 case IdWifiPacket:
                     HandleWifiPackets(&event);
                     break;
@@ -184,7 +184,7 @@ void RoomMember::RoomMemberImpl::MemberLoop() {
                     ASSERT_MSG(member_information.size() > 0,
                                "We have not yet received member information.");
                     HandleJoinPacket(&event); // Get the MAC Address for the client
-                    if (event.packet->data[0] == IdJoinSuccessAsMod) {
+                    if (packet_type == IdJoinSuccessAsMod) {
                         SetState(State::Moderator);
                     } else {
                         SetState(State::Joined);
@@ -236,35 +236,23 @@ void RoomMember::RoomMemberImpl::MemberLoop() {
                     SetError(Error::NoSuchUser);
                     break;
                 }
-                enet_packet_destroy(event.packet);
                 break;
-            case ENET_EVENT_TYPE_DISCONNECT:
+            }
+            case PC_EV_TYPE_DISCONNECT:
                 if (state == State::Joined || state == State::Moderator) {
                     SetState(State::Idle);
                     SetError(Error::LostConnection);
                 }
                 break;
-            case ENET_EVENT_TYPE_NONE:
+            case PC_EV_TYPE_NONE:
                 break;
-            case ENET_EVENT_TYPE_CONNECT:
+            case PC_EV_TYPE_CONNECT:
                 // The ENET_EVENT_TYPE_CONNECT event can not possibly happen here because we're
                 // already connected
                 ASSERT_MSG(false, "Received unexpected connect event while already connected");
                 break;
             }
         }
-
-        std::list<Packet> packets;
-        {
-            std::lock_guard send_list_lock(send_list_mutex);
-            packets.swap(send_list);
-        }
-        for (const auto& packet : packets) {
-            ENetPacket* enetPacket = enet_packet_create(packet.GetData(), packet.GetDataSize(),
-                                                        ENET_PACKET_FLAG_RELIABLE);
-            enet_peer_send(server, 0, enetPacket);
-        }
-        enet_host_flush(client);
     }
     Disconnect();
 };
@@ -273,9 +261,10 @@ void RoomMember::RoomMemberImpl::StartLoop() {
     loop_thread = std::make_unique<std::thread>(&RoomMember::RoomMemberImpl::MemberLoop, this);
 }
 
-void RoomMember::RoomMemberImpl::Send(Packet&& packet) {
-    std::lock_guard lock(send_list_mutex);
-    send_list.push_back(std::move(packet));
+void RoomMember::RoomMemberImpl::Send(NetPC::Packet&& packet, u32 flags) {
+    if (auto srv = server) {
+        srv->SendPacket(packet, flags);
+    }
 }
 
 void RoomMember::RoomMemberImpl::SendJoinRequest(const std::string& nickname,
@@ -283,7 +272,7 @@ void RoomMember::RoomMemberImpl::SendJoinRequest(const std::string& nickname,
                                                  const MacAddress& preferred_mac,
                                                  const std::string& password,
                                                  const std::string& token) {
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdJoinRequest);
     packet << nickname;
     packet << console_id_hash;
@@ -293,12 +282,11 @@ void RoomMember::RoomMemberImpl::SendJoinRequest(const std::string& nickname,
     packet << token;
     // todo: replace this with the actual current platform
     packet << static_cast<u8>(GetCurrentDeviceType());
-    Send(std::move(packet));
+    Send(std::move(packet), PC_SEND_FLAG_RELIABLE);
 }
 
-void RoomMember::RoomMemberImpl::HandleRoomInformationPacket(const ENetEvent* event) {
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+void RoomMember::RoomMemberImpl::HandleRoomInformationPacket(PC_Event* event) {
+    NetPC::Packet& packet = event->pk;
 
     // Ignore the first byte, which is the message id.
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
@@ -341,9 +329,8 @@ void RoomMember::RoomMemberImpl::HandleRoomInformationPacket(const ENetEvent* ev
     Invoke(room_information);
 }
 
-void RoomMember::RoomMemberImpl::HandleJoinPacket(const ENetEvent* event) {
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+void RoomMember::RoomMemberImpl::HandleJoinPacket(PC_Event* event) {
+    NetPC::Packet& packet = event->pk;
 
     // Ignore the first byte, which is the message id.
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
@@ -352,10 +339,9 @@ void RoomMember::RoomMemberImpl::HandleJoinPacket(const ENetEvent* event) {
     packet >> mac_address;
 }
 
-void RoomMember::RoomMemberImpl::HandleWifiPackets(const ENetEvent* event) {
+void RoomMember::RoomMemberImpl::HandleWifiPackets(PC_Event* event) {
     WifiPacket wifi_packet{};
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+    NetPC::Packet& packet = event->pk;
 
     // Ignore the first byte, which is the message id.
     packet.IgnoreBytes(sizeof(u8)); // Ignore the message type
@@ -374,9 +360,8 @@ void RoomMember::RoomMemberImpl::HandleWifiPackets(const ENetEvent* event) {
     Invoke<WifiPacket>(wifi_packet);
 }
 
-void RoomMember::RoomMemberImpl::HandleChatPacket(const ENetEvent* event) {
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+void RoomMember::RoomMemberImpl::HandleChatPacket(PC_Event* event) {
+    NetPC::Packet& packet = event->pk;
 
     // Ignore the first byte, which is the message id.
     packet.IgnoreBytes(sizeof(u8));
@@ -389,9 +374,8 @@ void RoomMember::RoomMemberImpl::HandleChatPacket(const ENetEvent* event) {
     Invoke<ChatEntry>(chat_entry);
 }
 
-void RoomMember::RoomMemberImpl::HandleStatusMessagePacket(const ENetEvent* event) {
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+void RoomMember::RoomMemberImpl::HandleStatusMessagePacket(PC_Event* event) {
+    NetPC::Packet& packet = event->pk;
 
     // Ignore the first byte, which is the message id.
     packet.IgnoreBytes(sizeof(u8));
@@ -405,9 +389,8 @@ void RoomMember::RoomMemberImpl::HandleStatusMessagePacket(const ENetEvent* even
     Invoke<StatusMessageEntry>(status_message_entry);
 }
 
-void RoomMember::RoomMemberImpl::HandleModBanListResponsePacket(const ENetEvent* event) {
-    Packet packet;
-    packet.Append(event->packet->data, event->packet->dataLength);
+void RoomMember::RoomMemberImpl::HandleModBanListResponsePacket(PC_Event* event) {
+    NetPC::Packet& packet = event->pk;
 
     // Ignore the first byte, which is the message id.
     packet.IgnoreBytes(sizeof(u8));
@@ -425,24 +408,7 @@ void RoomMember::RoomMemberImpl::Disconnect() {
 
     if (!server)
         return;
-    enet_peer_disconnect(server, 0);
-
-    ENetEvent event;
-    while (enet_host_service(client, &event, ConnectionTimeoutMs) > 0) {
-        switch (event.type) {
-        case ENET_EVENT_TYPE_RECEIVE:
-            enet_packet_destroy(event.packet); // Ignore all incoming data
-            break;
-        case ENET_EVENT_TYPE_DISCONNECT:
-            server = nullptr;
-            return;
-        case ENET_EVENT_TYPE_NONE:
-        case ENET_EVENT_TYPE_CONNECT:
-            break;
-        }
-    }
-    // didn't disconnect gracefully force disconnect
-    enet_peer_reset(server);
+    //server->Disconnect();
     server = nullptr;
 }
 
@@ -554,38 +520,23 @@ bool RoomMember::Join(const std::string& nick, const std::string& console_id_has
     }
 
     if (!room_member_impl->client) {
-        room_member_impl->client = enet_host_create(nullptr, 1, NumChannels, 0, 0);
-        ASSERT_MSG(room_member_impl->client != nullptr, "Could not create client");
+        room_member_impl->client = std::make_shared<PC_Client>();
     }
 
     room_member_impl->SetState(State::Joining);
-
-    ENetAddress address{};
-    enet_address_set_host(&address, server_addr);
-    address.port = server_port;
-    room_member_impl->server =
-        enet_host_connect(room_member_impl->client, &address, NumChannels, 0);
+    room_member_impl->server = room_member_impl->client->Connect({server_addr, server_port}, ConnectionTimeoutMs);
 
     if (!room_member_impl->server) {
-        room_member_impl->SetState(State::Idle);
-        room_member_impl->SetError(Error::UnknownError);
-        return false;
-    }
-
-    ENetEvent event{};
-    int net = enet_host_service(room_member_impl->client, &event, ConnectionTimeoutMs);
-    if (net > 0 && event.type == ENET_EVENT_TYPE_CONNECT) {
-        room_member_impl->nickname = nick;
-        room_member_impl->StartLoop();
-        room_member_impl->SendJoinRequest(nick, console_id_hash, preferred_mac, password, token);
-        SendGameInfo(room_member_impl->current_game_info);
-        return true;
-    } else {
-        enet_peer_disconnect(room_member_impl->server, 0);
         room_member_impl->SetState(State::Idle);
         room_member_impl->SetError(Error::CouldNotConnect);
         return false;
     }
+
+    room_member_impl->nickname = nick;
+    room_member_impl->StartLoop();
+    room_member_impl->SendJoinRequest(nick, console_id_hash, preferred_mac, password, token);
+    SendGameInfo(room_member_impl->current_game_info);
+    return true;
 }
 
 bool RoomMember::IsConnected() const {
@@ -593,7 +544,7 @@ bool RoomMember::IsConnected() const {
 }
 
 void RoomMember::SendWifiPacket(const WifiPacket& wifi_packet) {
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdWifiPacket);
     packet << static_cast<u8>(wifi_packet.type);
     packet << wifi_packet.channel;
@@ -604,10 +555,10 @@ void RoomMember::SendWifiPacket(const WifiPacket& wifi_packet) {
 }
 
 void RoomMember::SendChatMessage(const std::string& message) {
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdChatMessage);
     packet << message;
-    room_member_impl->Send(std::move(packet));
+    room_member_impl->Send(std::move(packet), PC_SEND_FLAG_RELIABLE);
 }
 
 void RoomMember::SendGameInfo(const GameInfo& game_info) {
@@ -615,11 +566,11 @@ void RoomMember::SendGameInfo(const GameInfo& game_info) {
     if (!IsConnected())
         return;
 
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdSetGameInfo);
     packet << game_info.name;
     packet << game_info.id;
-    room_member_impl->Send(std::move(packet));
+    room_member_impl->Send(std::move(packet), PC_SEND_FLAG_RELIABLE);
 }
 
 void RoomMember::SendModerationRequest(RoomMessageTypes type, const std::string& nickname) {
@@ -628,19 +579,19 @@ void RoomMember::SendModerationRequest(RoomMessageTypes type, const std::string&
     if (!IsConnected())
         return;
 
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(type);
     packet << nickname;
-    room_member_impl->Send(std::move(packet));
+    room_member_impl->Send(std::move(packet), PC_SEND_FLAG_RELIABLE);
 }
 
 void RoomMember::RequestBanList() {
     if (!IsConnected())
         return;
 
-    Packet packet;
+    NetPC::Packet packet;
     packet << static_cast<u8>(IdModGetBanList);
-    room_member_impl->Send(std::move(packet));
+    room_member_impl->Send(std::move(packet), PC_SEND_FLAG_RELIABLE);
 }
 
 RoomMember::CallbackHandle<RoomMember::State> RoomMember::BindOnStateChanged(
@@ -689,7 +640,6 @@ void RoomMember::Leave() {
     room_member_impl->loop_thread->join();
     room_member_impl->loop_thread.reset();
 
-    enet_host_destroy(room_member_impl->client);
     room_member_impl->client = nullptr;
 }
 

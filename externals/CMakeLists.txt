@@ -231,15 +231,9 @@ else()
     target_link_libraries(zstd INTERFACE libzstd_static zstd_seekable)
 endif()
 
-# ENet
-if(USE_SYSTEM_ENET)
-    find_package(libenet REQUIRED)
-    add_library(enet INTERFACE)
-    target_link_libraries(enet INTERFACE libenet::libenet)
-else()
-    add_subdirectory(enet EXCLUDE_FROM_ALL)
-    target_include_directories(enet INTERFACE ./enet/include)
-endif()
+# NetPC
+add_subdirectory(netpc EXCLUDE_FROM_ALL)
+target_include_directories(netpc INTERFACE ./netpc/include/)
 
 # Cubeb
 if (ENABLE_CUBEB)

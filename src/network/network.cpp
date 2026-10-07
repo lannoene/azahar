@@ -4,7 +4,7 @@
 
 #include "common/assert.h"
 #include "common/logging/log.h"
-#include "enet/enet.h"
+#include "netpc/pcall_host.h"
 #include "network/network.h"
 
 namespace Network {
@@ -14,10 +14,7 @@ static std::shared_ptr<Room> g_room;              ///< Room (Server) for network
 // TODO(B3N30): Put these globals into a networking class
 
 bool Init() {
-    if (enet_initialize() != 0) {
-        LOG_ERROR(Network, "Error initalizing ENet");
-        return false;
-    }
+    BaseSocket::InitNetworking();
     g_room = std::make_shared<Room>();
     g_room_member = std::make_shared<RoomMember>();
     LOG_DEBUG(Network, "initialized OK");
@@ -43,7 +40,7 @@ void Shutdown() {
             g_room->Destroy();
         g_room.reset();
     }
-    enet_deinitialize();
+    BaseSocket::DeinitNetworking();
     LOG_DEBUG(Network, "shutdown OK");
 }
 

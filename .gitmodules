@@ -103,3 +103,6 @@
 [submodule "externals/cryptopp"]
 	path = externals/cryptopp
 	url = https://github.com/cryptopp-modern/cryptopp-modern.git
+[submodule "externals/netpc"]
+	path = externals/netpc
+	url = https://github.com/lannoene/NetPC.git
