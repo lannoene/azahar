@@ -343,7 +343,11 @@ void Module::APTInterface::GetSharedFont(Kernel::HLERequestContext& ctx) {
 
 void Module::APTInterface::GetWirelessRebootInfo(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
-    const auto size = rp.Pop<u32>();
+    const auto size = std::min(rp.Pop<u32>(), max_wireless_reboot_info_size);
+
+    if (apt->wireless_reboot_info.size() < size) {
+        apt->wireless_reboot_info.resize(size);
+    }
 
     LOG_WARNING(Service_APT, "called size={:08X}", size);
 
